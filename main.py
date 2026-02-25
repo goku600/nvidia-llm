@@ -18,12 +18,10 @@ from telegram.ext import (
 from config import TELEGRAM_BOT_TOKEN, WEBHOOK_URL, PORT, HOST
 from handlers import (
     cmd_start,
-    cmd_mode,
     cmd_model,
     cmd_clear,
     cmd_privacy,
     cmd_help,
-    callback_mode,
     callback_model,
     handle_text,
     handle_photo,
@@ -48,12 +46,10 @@ async def main():
 
     # Register handlers
     app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("mode", cmd_mode))
     app.add_handler(CommandHandler("model", cmd_model))
     app.add_handler(CommandHandler("clear", cmd_clear))
     app.add_handler(CommandHandler("privacy", cmd_privacy))
     app.add_handler(CommandHandler("help", cmd_help))
-    app.add_handler(CallbackQueryHandler(callback_mode, pattern="^mode_"))
     app.add_handler(CallbackQueryHandler(callback_model, pattern="^model_"))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
