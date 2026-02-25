@@ -360,9 +360,27 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif effective_mode == "image":
             stop_typing.set()
             typing_task.cancel()
-            reply = "🖼️ Please send a photo and I'll analyze it for you!"
+            # Check if user is asking to modify an image
+            modify_image_keywords = [
+                "edit", "modify", "change", "crop", "resize", "rotate", "filter",
+                "blur", "sharpen", "convert", "remove background", "make it",
+                "turn it", "transform", "enhance", "fix the image", "edit the image",
+            ]
+            text_lower = user_text.lower()
+            if any(kw in text_lower for kw in modify_image_keywords):
+                reply = (
+                    "🖼️ I can *analyze* images but I can't edit or modify them yet.\n\n"
+                    "What I *can* do:\n"
+                    "• Describe what's in the image\n"
+                    "• Answer questions about the image\n"
+                    "• Extract text from images (OCR)\n"
+                    "• Identify objects, people, scenes\n\n"
+                    "Image editing support may be added in the future! 🔜"
+                )
+            else:
+                reply = "🖼️ Please send a photo and I'll analyze it for you!"
             sess.add_message(user_id, "assistant", reply)
-            await thinking_msg.edit_text(reply)
+            await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
             return
 
         else:
@@ -416,7 +434,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         mime_type = "image/jpeg"  # Telegram photos are always JPEG
 
         history = sess.get_history(user_id)
-        reply = ai.image_analysis(file_bytes, mime_type, caption, history)
+        prompt = caption or "Describe this image in detail."
+        reply = ai.image_analysis(file_bytes, mime_type, prompt, history)
 
         # Log image interaction in history as text
         user_entry = f"[User sent an image{': ' + caption if caption else ''}]"
