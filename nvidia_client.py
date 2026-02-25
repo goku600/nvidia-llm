@@ -16,34 +16,35 @@ def _build_headers(stream: bool = False):
     }
 
 
-from typing import Generator
+import aiohttp
+from typing import AsyncGenerator
 
-def _post(payload: dict) -> Generator[str, None, None]:
+async def _post(payload: dict):
     """Send a streaming request to NVIDIA API and yield text chunks."""
     payload = {**payload, "stream": True}
     headers = _build_headers(stream=True)
-    response = requests.post(
-        NVIDIA_API_URL, headers=headers, json=payload,
-        stream=True, timeout=(10, 300)  # 10s connect, 300s read
-    )
-    response.raise_for_status()
-
-    for line in response.iter_lines():
-        if not line:
-            continue
-        line = line.decode("utf-8")
-        if line.startswith("data: "):
-            data_str = line[6:]
-            if data_str.strip() == "[DONE]":
-                break
-            try:
-                data = json.loads(data_str)
-                delta = data["choices"][0].get("delta", {})
-                content = delta.get("content", "")
-                if content:
-                    yield content
-            except (json.JSONDecodeError, KeyError, IndexError):
-                continue
+    timeout = aiohttp.ClientTimeout(total=300, connect=10)
+    
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.post(NVIDIA_API_URL, headers=headers, json=payload) as response:
+            response.raise_for_status()
+            
+            async for line in response.content:
+                if not line:
+                    continue
+                line = line.decode("utf-8")
+                if line.startswith("data: "):
+                    data_str = line[6:]
+                    if data_str.strip() == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(data_str)
+                        delta = data["choices"][0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            yield content
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue
 
 
 def _base_payload(model: str, messages: list, thinking: bool = False) -> dict:
@@ -67,7 +68,7 @@ def _base_payload(model: str, messages: list, thinking: bool = False) -> dict:
 # Unified Omni-Modal Chat
 # ---------------------------------------------------------------------------
 
-def chat(history: list[dict], model: str = CHAT_MODEL) -> Generator[str, None, None]:
+async def chat(history: list[dict], model: str = CHAT_MODEL) -> AsyncGenerator[str, None]:
     """
     history: list of {"role": "user"|"assistant"|"system", "content": str}
     Yields chunks of the assistant's reply.
@@ -117,7 +118,7 @@ def chat(history: list[dict], model: str = CHAT_MODEL) -> Generator[str, None, N
     messages = [{"role": "system", "content": system_prompt}] + history
     payload = _base_payload(model, messages)
     
-    for chunk in _post(payload):
+    async for chunk in _post(payload):
         yield chunk
 
 
@@ -125,7 +126,7 @@ def chat(history: list[dict], model: str = CHAT_MODEL) -> Generator[str, None, N
 # Image Analysis
 # ---------------------------------------------------------------------------
 
-def image_analysis(image_bytes: bytes, mime_type: str, user_prompt: str, history: list[dict]) -> str:
+async def image_analysis(image_bytes: bytes, mime_type: str, user_prompt: str, history: list[dict]) -> AsyncGenerator[str, None]:
     """
     image_bytes: raw image bytes
     mime_type: e.g. "image/jpeg", "image/png"
@@ -156,4 +157,6 @@ def image_analysis(image_bytes: bytes, mime_type: str, user_prompt: str, history
     messages = text_history + [current_message]
 
     payload = _base_payload(VISION_MODEL, messages)
-    return _post(payload)
+    
+    async for chunk in _post(payload):
+        yield chunk

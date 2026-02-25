@@ -311,7 +311,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             full_reply = ""
             last_edit_time = 0
             
-            for chunk in ai.chat(history, model=model):
+            async for chunk in ai.chat(history, model=model):
                 full_reply += chunk
                 
                 # Update Telegram message every 1.5 seconds to avoid rate limits
