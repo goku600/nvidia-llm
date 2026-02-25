@@ -2,10 +2,11 @@
 Telegram message/command handlers.
 """
 import io
+import asyncio
 import base64
 import logging
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode, ChatAction
 
@@ -14,6 +15,16 @@ import session as sess
 from config import SELECTABLE_MODELS
 
 logger = logging.getLogger(__name__)
+
+
+async def _keep_typing(bot, chat_id: int, stop_event: asyncio.Event):
+    """Send typing action every 4 seconds until stop_event is set."""
+    while not stop_event.is_set():
+        try:
+            await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+        except Exception:
+            pass
+        await asyncio.sleep(4)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -192,8 +203,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_text:
         return
 
-    await context.bot.send_chat_action(
-        chat_id=update.effective_chat.id, action=ChatAction.TYPING
+    # Send immediate feedback
+    thinking_msg: Message = await update.message.reply_text("⏳ Thinking...")
+
+    # Start persistent typing indicator in background
+    stop_typing = asyncio.Event()
+    typing_task = asyncio.create_task(
+        _keep_typing(context.bot, update.effective_chat.id, stop_typing)
     )
 
     sess.add_message(user_id, "user", user_text)
@@ -210,22 +226,26 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif mode == "doc":
             doc_text = sess.get_doc_text(user_id)
             if not doc_text:
+                stop_typing.set()
+                typing_task.cancel()
                 reply = (
                     "📄 You're in *Document Q&A* mode but haven't uploaded a document yet.\n"
                     "Please upload a file first (.txt, .pdf, .py, .md, etc.)."
                 )
                 sess.add_message(user_id, "assistant", reply)
-                await update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
+                await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
                 return
             reply = ai.document_qa(doc_text, history, model=model)
 
         elif mode == "image":
+            stop_typing.set()
+            typing_task.cancel()
             reply = (
                 "🖼️ You're in *Image Analysis* mode.\n"
                 "Please send a photo (you can add a caption with your question)."
             )
             sess.add_message(user_id, "assistant", reply)
-            await update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
+            await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
             return
 
         else:
@@ -233,12 +253,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"NVIDIA API error: {e}")
+        stop_typing.set()
+        typing_task.cancel()
         reply = f"⚠️ Sorry, I ran into an error talking to the AI:\n`{e}`"
-        await update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
+        await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
         return
 
+    finally:
+        stop_typing.set()
+        typing_task.cancel()
+
     sess.add_message(user_id, "assistant", reply)
-    await _send_long(update, reply)
+
+    # Edit the "Thinking..." message with the first chunk, send rest as new messages
+    MAX = 4000
+    chunks = [reply[i:i+MAX] for i in range(0, len(reply), MAX)]
+    await thinking_msg.edit_text(chunks[0])
+    for chunk in chunks[1:]:
+        await update.message.reply_text(chunk)
 
 
 # ---------------------------------------------------------------------------
@@ -257,8 +289,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    await context.bot.send_chat_action(
-        chat_id=update.effective_chat.id, action=ChatAction.TYPING
+    thinking_msg: Message = await update.message.reply_text("⏳ Analyzing image...")
+
+    stop_typing = asyncio.Event()
+    typing_task = asyncio.create_task(
+        _keep_typing(context.bot, update.effective_chat.id, stop_typing)
     )
 
     # Get highest resolution photo
@@ -279,14 +314,21 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sess.add_message(user_id, "user", user_entry)
         sess.add_message(user_id, "assistant", reply)
 
-        await _send_long(update, reply)
+        MAX = 4000
+        chunks = [reply[i:i+MAX] for i in range(0, len(reply), MAX)]
+        await thinking_msg.edit_text(chunks[0])
+        for chunk in chunks[1:]:
+            await update.message.reply_text(chunk)
 
     except Exception as e:
         logger.error(f"Image analysis error: {e}")
-        await update.message.reply_text(
+        await thinking_msg.edit_text(
             f"⚠️ Error analyzing the image:\n`{e}`",
             parse_mode=ParseMode.MARKDOWN,
         )
+    finally:
+        stop_typing.set()
+        typing_task.cancel()
 
 
 # ---------------------------------------------------------------------------
@@ -305,8 +347,11 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    await context.bot.send_chat_action(
-        chat_id=update.effective_chat.id, action=ChatAction.TYPING
+    thinking_msg: Message = await update.message.reply_text("⏳ Processing document...")
+
+    stop_typing = asyncio.Event()
+    typing_task = asyncio.create_task(
+        _keep_typing(context.bot, update.effective_chat.id, stop_typing)
     )
 
     doc = update.message.document
@@ -321,7 +366,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = _extract_text(bytes(file_bytes), file_name, mime)
 
         if not text.strip():
-            await update.message.reply_text(
+            await thinking_msg.edit_text(
                 "⚠️ I couldn't extract any text from that file. "
                 "Please try a plain text file (.txt, .md, .py, .csv, .json, etc.)."
             )
@@ -337,7 +382,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         sess.set_doc_text(user_id, text)
         word_count = len(text.split())
-        await update.message.reply_text(
+        await thinking_msg.edit_text(
             f"✅ Document *{file_name}* loaded successfully!\n"
             f"📊 ~{word_count:,} words extracted.\n\n"
             "Now ask me anything about it!",
@@ -346,10 +391,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"Document processing error: {e}")
-        await update.message.reply_text(
+        await thinking_msg.edit_text(
             f"⚠️ Error processing the document:\n`{e}`",
             parse_mode=ParseMode.MARKDOWN,
         )
+    finally:
+        stop_typing.set()
+        typing_task.cancel()
 
 
 def _extract_text(data: bytes, filename: str, mime: str) -> str:
