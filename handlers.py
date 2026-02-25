@@ -85,7 +85,6 @@ async def _edit_or_send(thinking_msg: Message, update: Update, text: str):
 
 def _is_modification_request(text: str) -> bool:
     """Detect if the user wants to modify/edit the file and get it back."""
-    # Strong explicit modification phrases
     strong_keywords = [
         "modify the file", "edit the file", "change the file", "update the file",
         "modify this file", "edit this file",
@@ -111,6 +110,51 @@ def _is_modification_request(text: str) -> bool:
     ]
     text_lower = text.lower()
     return any(kw in text_lower for kw in strong_keywords)
+
+
+def _is_create_file_request(text: str) -> tuple[bool, str]:
+    """
+    Detect if the user wants to create a new file from scratch.
+    Returns (is_create_request, detected_extension).
+    """
+    text_lower = text.lower()
+
+    # Must have a creation verb
+    create_verbs = [
+        "create", "generate", "make", "write", "produce", "build",
+        "give me a", "give me the", "send me a", "send me the",
+        "i want a", "i need a", "can you make", "can you create",
+        "can you generate", "can you write",
+    ]
+    has_verb = any(v in text_lower for v in create_verbs)
+    if not has_verb:
+        return False, ""
+
+    # Map keywords to file extensions
+    file_type_map = [
+        (["text file", ".txt", "txt file", "plain text file"], "txt"),
+        (["excel file", ".xlsx", "spreadsheet", "excel sheet", "xlsx"], "xlsx"),
+        (["csv file", ".csv", "csv"], "csv"),
+        (["word file", "word doc", ".docx", "docx", "word document"], "docx"),
+        (["json file", ".json", "json"], "json"),
+        (["python script", "python file", ".py", "py script", "python program"], "py"),
+        (["markdown file", ".md", "md file", "markdown"], "md"),
+        (["html file", ".html", "html page", "webpage"], "html"),
+        (["javascript file", ".js", "js file", "javascript"], "js"),
+        (["yaml file", ".yaml", ".yml", "yaml"], "yaml"),
+        (["xml file", ".xml", "xml"], "xml"),
+        (["pdf", ".pdf"], "pdf"),
+    ]
+
+    for keywords, ext in file_type_map:
+        if any(kw in text_lower for kw in keywords):
+            return True, ext
+
+    # Generic "file" or "document" without specific type → default to txt
+    if any(w in text_lower for w in ["a file", "a document", "the file", "the document"]):
+        return True, "txt"
+
+    return False, ""
 
 
 # ---------------------------------------------------------------------------
@@ -330,6 +374,33 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         effective_mode = mode  # respect explicit code/doc mode
 
     try:
+        # --- CREATE FILE FROM SCRATCH ---
+        is_create, ext = _is_create_file_request(user_text)
+        if is_create and not doc_text:
+            await thinking_msg.edit_text(f"⚙️ Creating your {ext.upper()} file, please wait...")
+            output_bytes, output_filename, error = file_modifier.create_file(
+                user_request=user_text,
+                ext=ext,
+                model=model,
+            )
+            stop_typing.set()
+            typing_task.cancel()
+            if error:
+                reply = f"⚠️ Could not create the file:\n`{error[:500]}`"
+                await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
+            else:
+                await thinking_msg.edit_text(f"✅ File created! Sending it now...")
+                await update.message.reply_document(
+                    document=io.BytesIO(output_bytes),
+                    filename=output_filename,
+                    caption=f"✅ Here's your file: *{output_filename}*",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            sess.add_message(user_id, "user", user_text)
+            sess.add_message(user_id, "assistant",
+                             f"[Created file: {output_filename}]" if not error else error)
+            return
+
         if effective_mode == "doc" and doc_text:
             # Check if user wants to modify the file
             if _is_modification_request(user_text):

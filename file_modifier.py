@@ -128,6 +128,89 @@ def _safe_exec(code: str, input_bytes: bytes) -> tuple[bytes | None, str | None,
     return output_bytes, result["filename"], None
 
 
+def _build_create_prompt(user_request: str, ext: str) -> str:
+    return f"""You are a file creation assistant. The user wants you to create a file from scratch.
+
+USER REQUEST: {user_request}
+OUTPUT FILE TYPE: .{ext}
+
+Your task: Write a complete Python script that:
+1. Creates the requested file content entirely in memory
+2. Saves the result to `output_buffer` (an `io.BytesIO` variable already available in scope)
+3. Sets `output_filename` (a string variable) to a descriptive filename with .{ext} extension
+
+Rules:
+- Use only these libraries: io, json, csv, re, math, datetime, collections, openpyxl, docx
+- Do NOT use open(), os, sys, subprocess, requests, or any network/file system calls
+- Write to `output_buffer` (BytesIO) only
+- For .xlsx: use openpyxl
+- For .docx: use python-docx (import docx)
+- For .csv, .txt, .json, .md, .py, .html, .js, .yaml, .xml: encode as UTF-8 and write to output_buffer
+- Set output_filename to a good descriptive name like "numbers_1_to_99999.txt"
+- The script must be complete and runnable
+- Only output the Python code, no explanations, no markdown fences
+
+Example for a text file with numbers 1 to 10:
+content = "\\n".join(str(i) for i in range(1, 11))
+output_buffer.write(content.encode("utf-8"))
+output_filename = "numbers_1_to_10.txt"
+
+Now write the Python script:"""
+
+
+def create_file(user_request: str, ext: str, model: str) -> tuple[bytes | None, str | None, str | None]:
+    """
+    Create a new file from scratch based on user request.
+    Returns (file_bytes, filename, error_message)
+    """
+    import nvidia_client as ai
+
+    prompt = _build_create_prompt(user_request, ext)
+    messages = [{"role": "user", "content": prompt}]
+
+    try:
+        code_response = ai.chat(messages, model=model)
+    except Exception as e:
+        return None, None, f"AI failed to generate code: {e}"
+
+    # Strip markdown fences if present
+    code = code_response.strip()
+    if code.startswith("```"):
+        lines = code.split("\n")
+        code = "\n".join(lines[1:])
+    if code.endswith("```"):
+        code = code[:code.rfind("```")]
+    code = code.strip()
+
+    logger.info(f"Generated code for file creation:\n{code[:500]}")
+
+    output_bytes, output_filename, error = _safe_exec(code, b"")
+
+    if error:
+        # Retry once with error feedback
+        retry_prompt = (
+            f"{prompt}\n\n"
+            f"Your previous attempt failed with this error:\n{error}\n\n"
+            "Fix the error and write the corrected Python script:"
+        )
+        messages = [{"role": "user", "content": retry_prompt}]
+        try:
+            code_response2 = ai.chat(messages, model=model)
+            code2 = code_response2.strip()
+            if code2.startswith("```"):
+                code2 = "\n".join(code2.split("\n")[1:])
+            if code2.endswith("```"):
+                code2 = code2[:code2.rfind("```")]
+            code2 = code2.strip()
+            output_bytes, output_filename, error2 = _safe_exec(code2, b"")
+            if error2:
+                return None, None, f"Could not create the file after 2 attempts.\nLast error: {error2}"
+        except Exception as e:
+            return None, None, f"Retry failed: {e}"
+
+    return output_bytes, output_filename, None
+
+
 def modify_file(doc_text: str, file_bytes: bytes, filename: str,
                 user_request: str, model: str) -> tuple[bytes | None, str | None, str | None]:
     """
