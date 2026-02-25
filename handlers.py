@@ -74,17 +74,33 @@ async def _send_long(update: Update, text: str):
 
 
 def _is_modification_request(text: str) -> bool:
-    """Detect if the user wants to modify/edit the file rather than just ask about it."""
-    keywords = [
-        "modify", "edit", "change", "update", "add", "remove", "delete", "insert",
-        "rename", "replace", "fix", "correct", "reformat", "convert", "transform",
-        "sort", "filter", "calculate", "compute", "sum", "total", "average",
-        "create", "generate", "make", "write", "save", "export", "download",
-        "send", "give me", "provide", "produce", "output", "return",
-        "append", "prepend", "merge", "split", "format", "clean", "fill",
+    """Detect if the user wants to modify/edit the file and get it back."""
+    # Strong explicit modification phrases
+    strong_keywords = [
+        "modify the file", "edit the file", "change the file", "update the file",
+        "modify this file", "edit this file",
+        "send me the file", "send the file back", "send back", "send me back",
+        "download the file", "export the file", "give me the file",
+        "save the file", "save and send", "save it",
+        "add a row", "add a column", "add a sheet", "add a total", "add a sum",
+        "remove the row", "remove the column", "delete the row", "delete the column",
+        "remove duplicates", "delete duplicates",
+        "sort the", "sort by", "filter the", "filter by",
+        "rename the column", "rename column",
+        "reformat the", "convert to csv", "convert to excel", "convert to pdf",
+        "convert the file", "convert this to",
+        "insert a row", "insert a column",
+        "replace all", "find and replace",
+        "clean the data", "clean up the",
+        "merge the sheets", "split the file",
+        "format the", "fix the file",
+        "make changes", "apply changes",
+        "update the data", "update the row", "update the column",
+        "fill in the", "fill the",
+        "append to", "prepend to",
     ]
     text_lower = text.lower()
-    return any(kw in text_lower for kw in keywords)
+    return any(kw in text_lower for kw in strong_keywords)
 
 
 # ---------------------------------------------------------------------------
