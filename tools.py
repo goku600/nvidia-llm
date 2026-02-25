@@ -3,7 +3,7 @@ tools.py
 External utilities for the AI (e.g. Web Search).
 """
 import logging
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 logger = logging.getLogger(__name__)
 
