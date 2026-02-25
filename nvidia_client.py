@@ -8,20 +8,42 @@ from config import (
 )
 
 
-def _build_headers():
+def _build_headers(stream: bool = False):
     return {
         "Authorization": f"Bearer {NVIDIA_API_KEY}",
-        "Accept": "application/json",
+        "Accept": "text/event-stream" if stream else "application/json",
     }
 
 
 def _post(payload: dict) -> str:
-    """Send a request to NVIDIA API and return the assistant reply text."""
-    headers = _build_headers()
-    response = requests.post(NVIDIA_API_URL, headers=headers, json=payload, timeout=120)
+    """Send a streaming request to NVIDIA API and return the full assembled reply."""
+    payload = {**payload, "stream": True}
+    headers = _build_headers(stream=True)
+    response = requests.post(
+        NVIDIA_API_URL, headers=headers, json=payload,
+        stream=True, timeout=(10, 300)  # 10s connect, 300s read
+    )
     response.raise_for_status()
-    data = response.json()
-    return data["choices"][0]["message"]["content"]
+
+    full_text = []
+    for line in response.iter_lines():
+        if not line:
+            continue
+        line = line.decode("utf-8")
+        if line.startswith("data: "):
+            data_str = line[6:]
+            if data_str.strip() == "[DONE]":
+                break
+            try:
+                data = json.loads(data_str)
+                delta = data["choices"][0].get("delta", {})
+                content = delta.get("content", "")
+                if content:
+                    full_text.append(content)
+            except (json.JSONDecodeError, KeyError, IndexError):
+                continue
+
+    return "".join(full_text)
 
 
 def _base_payload(model: str, messages: list, thinking: bool = False) -> dict:
@@ -34,7 +56,7 @@ def _base_payload(model: str, messages: list, thinking: bool = False) -> dict:
         "top_k": TOP_K,
         "presence_penalty": 0,
         "repetition_penalty": 1,
-        "stream": False,
+        "stream": False,  # overridden in _post
     }
     if thinking:
         payload["chat_template_kwargs"] = {"enable_thinking": True}
