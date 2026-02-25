@@ -3,7 +3,7 @@ In-memory session store for per-user conversation history and mode tracking.
 On Render free tier, memory is reset when the instance restarts — that's acceptable.
 """
 from collections import defaultdict
-from config import MAX_HISTORY_MESSAGES
+from config import MAX_HISTORY_MESSAGES, CHAT_MODEL
 
 # Supported modes
 MODES = {
@@ -15,11 +15,12 @@ MODES = {
 
 DEFAULT_MODE = "chat"
 
-# user_id -> {"mode": str, "history": list[dict], "doc_text": str|None}
+# user_id -> {\"mode\": str, \"history\": list[dict], \"doc_text\": str|None, \"model\": str}
 _sessions: dict[int, dict] = defaultdict(lambda: {
     "mode": DEFAULT_MODE,
     "history": [],
     "doc_text": None,
+    "model": CHAT_MODEL,  # default model
 })
 
 
@@ -59,9 +60,19 @@ def get_doc_text(user_id: int) -> str | None:
     return _sessions[user_id]["doc_text"]
 
 
+def get_model(user_id: int) -> str:
+    return _sessions[user_id]["model"]
+
+
+def set_model(user_id: int, model: str):
+    _sessions[user_id]["model"] = model
+    _sessions[user_id]["history"] = []  # clear history on model switch
+
+
 def clear_session(user_id: int):
     _sessions[user_id] = {
         "mode": DEFAULT_MODE,
         "history": [],
         "doc_text": None,
+        "model": CHAT_MODEL,
     }

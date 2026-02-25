@@ -11,6 +11,7 @@ from telegram.constants import ParseMode, ChatAction
 
 import nvidia_client as ai
 import session as sess
+from config import SELECTABLE_MODELS
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "*Commands:*\n"
         "/start — Welcome message & mode picker\n"
         "/mode — Switch between assistant modes\n"
+        "/model — Switch the AI model\n"
         "/clear — Clear conversation history\n"
         "/help — Show this help message\n\n"
         "*Modes:*\n"
@@ -97,8 +99,34 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "*Tips:*\n"
         "• The bot remembers your last 20 messages per mode\n"
         "• Use /clear to reset the conversation\n"
-        "• Use /mode to switch modes anytime",
+        "• Use /mode to switch modes anytime\n"
+        "• Use /model to switch the AI model anytime",
         parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+def _model_keyboard():
+    buttons = []
+    for key, (model_id, label) in SELECTABLE_MODELS.items():
+        buttons.append([InlineKeyboardButton(label, callback_data=f"model_{key}")])
+    return InlineKeyboardMarkup(buttons)
+
+
+async def cmd_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    current_model = sess.get_model(user_id)
+    # Find current model label
+    current_label = current_model
+    for key, (model_id, label) in SELECTABLE_MODELS.items():
+        if model_id == current_model:
+            current_label = label
+            break
+    await update.message.reply_text(
+        f"🧠 *Current model:* `{current_label}`\n\n"
+        "Choose a model to switch to:\n"
+        "_(Note: Image Analysis always uses the vision model regardless of this setting)_",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=_model_keyboard(),
     )
 
 
@@ -132,6 +160,26 @@ async def callback_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def callback_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    key = query.data.replace("model_", "")
+
+    if key not in SELECTABLE_MODELS:
+        return
+
+    model_id, label = SELECTABLE_MODELS[key]
+    sess.set_model(user_id, model_id)
+
+    await query.edit_message_text(
+        f"✅ Switched to *{label}*\n\n"
+        f"`{model_id}`\n\n"
+        "Conversation history cleared. Start chatting!",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Text messages
 # ---------------------------------------------------------------------------
@@ -150,13 +198,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     sess.add_message(user_id, "user", user_text)
     history = sess.get_history(user_id)
+    model = sess.get_model(user_id)
 
     try:
         if mode == "chat":
-            reply = ai.chat(history)
+            reply = ai.chat(history, model=model)
 
         elif mode == "code":
-            reply = ai.code_assist(history)
+            reply = ai.code_assist(history, model=model)
 
         elif mode == "doc":
             doc_text = sess.get_doc_text(user_id)
@@ -168,7 +217,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 sess.add_message(user_id, "assistant", reply)
                 await update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
                 return
-            reply = ai.document_qa(doc_text, history)
+            reply = ai.document_qa(doc_text, history, model=model)
 
         elif mode == "image":
             reply = (
@@ -180,7 +229,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         else:
-            reply = ai.chat(history)
+            reply = ai.chat(history, model=model)
 
     except Exception as e:
         logger.error(f"NVIDIA API error: {e}")

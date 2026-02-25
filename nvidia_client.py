@@ -67,12 +67,12 @@ def _base_payload(model: str, messages: list, thinking: bool = False) -> dict:
 # Chat
 # ---------------------------------------------------------------------------
 
-def chat(history: list[dict]) -> str:
+def chat(history: list[dict], model: str = CHAT_MODEL) -> str:
     """
     history: list of {"role": "user"|"assistant", "content": str}
     Returns the assistant reply.
     """
-    payload = _base_payload(CHAT_MODEL, history, thinking=True)
+    payload = _base_payload(model, history)
     return _post(payload)
 
 
@@ -80,7 +80,7 @@ def chat(history: list[dict]) -> str:
 # Code Assistant
 # ---------------------------------------------------------------------------
 
-def code_assist(history: list[dict]) -> str:
+def code_assist(history: list[dict], model: str = CODE_MODEL) -> str:
     system = {
         "role": "system",
         "content": (
@@ -91,7 +91,7 @@ def code_assist(history: list[dict]) -> str:
         ),
     }
     messages = [system] + history
-    payload = _base_payload(CODE_MODEL, messages, thinking=True)
+    payload = _base_payload(model, messages)
     return _post(payload)
 
 
@@ -99,7 +99,7 @@ def code_assist(history: list[dict]) -> str:
 # Document Q&A
 # ---------------------------------------------------------------------------
 
-def document_qa(document_text: str, history: list[dict]) -> str:
+def document_qa(document_text: str, history: list[dict], model: str = DOC_MODEL) -> str:
     system = {
         "role": "system",
         "content": (
@@ -111,7 +111,7 @@ def document_qa(document_text: str, history: list[dict]) -> str:
         ),
     }
     messages = [system] + history
-    payload = _base_payload(DOC_MODEL, messages)
+    payload = _base_payload(model, messages)
     return _post(payload)
 
 
