@@ -334,7 +334,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await thinking_msg.edit_text(f"🔍 Searching the web for: `{query}`...", parse_mode=ParseMode.MARKDOWN)
                 
                 import tools
-                search_results = tools.search_web(query)
+                search_results = await asyncio.to_thread(tools.search_web, query)
                 
                 # We save the AI's partial thought
                 clean_thought = full_reply[:search_start].strip()
@@ -361,14 +361,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 file_bytes, _, _ = sess.get_doc_file(user_id)
                 input_bytes = file_bytes if file_bytes else b""
                 
-                output_bytes, output_filename, error = file_modifier.execute_python_code(code, input_bytes)
+                output_bytes, output_filename, error = await asyncio.to_thread(
+                    file_modifier.execute_python_code, code, input_bytes
+                )
                 
                 # Clean the reply to remove the python block
                 clean_reply = full_reply[:exec_start].strip() + "\n" + full_reply[exec_end + len("[/PYTHON_EXEC]"):].strip()
                 final_reply = clean_reply.strip() or "✅ Task completed."
                 
                 if error:
-                    final_reply += f"\n\n⚠️ **Execution Error:**\n`{error[:500]}`"
+                    final_reply += f"\n\n⚠️ **Execution Error:**\n```\n{error[:500]}\n```"
                 elif output_bytes:
                     output_file = (output_bytes, output_filename)
                 else:
@@ -384,8 +386,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"NVIDIA API error: {e}")
         stop_typing.set()
         typing_task.cancel()
-        final_reply = f"⚠️ Sorry, I ran into an error talking to the AI:\n`{e}`"
-        await thinking_msg.edit_text(final_reply, parse_mode=ParseMode.MARKDOWN)
+        final_reply = f"⚠️ Sorry, I ran into an error talking to the AI:\n```\n{e}\n```"
+        await _edit_or_send(thinking_msg, update, final_reply)
         return
 
     finally:
