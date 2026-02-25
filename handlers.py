@@ -54,17 +54,36 @@ async def _edit_or_send(thinking_msg: Message, update: Update, text: str):
     If the text is too long, edit with the first chunk and send the rest as
     a single follow-up message (truncated with a note) to avoid choppy multi-message UX.
     """
-    if len(text) <= MAX_MSG:
-        await thinking_msg.edit_text(text)
-    else:
-        # Send first MAX_MSG chars, then one follow-up with the remainder
-        first = text[:MAX_MSG]
-        rest = text[MAX_MSG:]
-        await thinking_msg.edit_text(first)
-        # If rest is also too long, truncate gracefully
-        if len(rest) > MAX_MSG:
-            rest = rest[:MAX_MSG - 100] + "\n\n_[Response truncated — ask me to continue]_"
-        await update.effective_message.reply_text(rest, parse_mode=ParseMode.MARKDOWN)
+    if not text or not text.strip():
+        # Fallback if the AI returns literally nothing
+        text = "_(No spoken response)_"
+        
+    try:
+        if len(text) <= MAX_MSG:
+            try:
+                await thinking_msg.edit_text(text, parse_mode=ParseMode.MARKDOWN)
+            except Exception as e:
+                if "Message is not modified" in str(e): return
+                await thinking_msg.edit_text(text) # Fallback to plaintext
+        else:
+            # Send first MAX_MSG chars, then one follow-up with the remainder
+            first = text[:MAX_MSG]
+            rest = text[MAX_MSG:]
+            try:
+                await thinking_msg.edit_text(first, parse_mode=ParseMode.MARKDOWN)
+            except Exception:
+                await thinking_msg.edit_text(first)
+            
+            # If rest is also too long, truncate gracefully
+            if len(rest) > MAX_MSG:
+                rest = rest[:MAX_MSG - 100] + "\n\n_[Response truncated — ask me to continue]_"
+            
+            try:
+                await update.effective_message.reply_text(rest, parse_mode=ParseMode.MARKDOWN)
+            except Exception:
+                await update.effective_message.reply_text(rest)
+    except Exception as e:
+        logger.error(f"Failed to edit message entirely in _edit_or_send: {e}")
 
 
 def _is_modification_request(text: str) -> bool:

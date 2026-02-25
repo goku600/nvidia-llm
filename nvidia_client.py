@@ -43,7 +43,9 @@ async def _post(payload: dict):
                         content = delta.get("content", "")
                         if content:
                             yield content
-                    except (json.JSONDecodeError, KeyError, IndexError):
+                    except (json.JSONDecodeError, KeyError, IndexError) as e:
+                        import logging
+                        logging.getLogger(__name__).warning(f"Failed to parse NVIDIA API chunk: '{data_str}' -> Error: {e}")
                         continue
 
 
