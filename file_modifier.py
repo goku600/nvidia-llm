@@ -85,11 +85,17 @@ def _safe_exec(code: str, input_bytes: bytes) -> tuple[bytes | None, str | None,
     }
 
     # Allow safe imports via a controlled __import__
-    def safe_import(name, *args, **kwargs):
+    # Note: Python's __import__ signature is (name, globals, locals, fromlist, level)
+    # importlib.import_module only takes (name, package) — we must not pass extra args
+    def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
         base = name.split(".")[0]
         if base not in SAFE_MODULES:
             raise ImportError(f"Import of '{name}' is not allowed in sandbox.")
-        return importlib.import_module(name, *args[1:], **kwargs)
+        module = importlib.import_module(name)
+        # Handle "from x import y, z" style — return the submodule/attr
+        if fromlist:
+            return module
+        return module
 
     safe_builtins["__import__"] = safe_import
     safe_builtins["print"] = lambda *a, **k: None  # silence prints
