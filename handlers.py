@@ -62,15 +62,25 @@ def _mode_label(mode: str) -> str:
     return sess.MODES.get(mode, mode)
 
 
-async def _send_long(update: Update, text: str):
-    """Send text, splitting into chunks if it exceeds Telegram's 4096 char limit."""
-    MAX = 4000
-    if len(text) <= MAX:
-        await update.effective_message.reply_text(text)
-        return
-    chunks = [text[i:i+MAX] for i in range(0, len(text), MAX)]
-    for chunk in chunks:
-        await update.effective_message.reply_text(chunk)
+MAX_MSG = 4000
+
+async def _edit_or_send(thinking_msg: Message, update: Update, text: str):
+    """
+    Edit the thinking_msg with the full reply if it fits in one message.
+    If the text is too long, edit with the first chunk and send the rest as
+    a single follow-up message (truncated with a note) to avoid choppy multi-message UX.
+    """
+    if len(text) <= MAX_MSG:
+        await thinking_msg.edit_text(text)
+    else:
+        # Send first MAX_MSG chars, then one follow-up with the remainder
+        first = text[:MAX_MSG]
+        rest = text[MAX_MSG:]
+        await thinking_msg.edit_text(first)
+        # If rest is also too long, truncate gracefully
+        if len(rest) > MAX_MSG:
+            rest = rest[:MAX_MSG - 100] + "\n\n_[Response truncated — ask me to continue]_"
+        await update.effective_message.reply_text(rest, parse_mode=ParseMode.MARKDOWN)
 
 
 def _is_modification_request(text: str) -> bool:
@@ -399,13 +409,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         typing_task.cancel()
 
     sess.add_message(user_id, "assistant", reply)
-
-    # Edit the "Thinking..." message with the first chunk, send rest as new messages
-    MAX = 4000
-    chunks = [reply[i:i+MAX] for i in range(0, len(reply), MAX)]
-    await thinking_msg.edit_text(chunks[0])
-    for chunk in chunks[1:]:
-        await update.message.reply_text(chunk)
+    await _edit_or_send(thinking_msg, update, reply)
 
 
 # ---------------------------------------------------------------------------
@@ -441,12 +445,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_entry = f"[User sent an image{': ' + caption if caption else ''}]"
         sess.add_message(user_id, "user", user_entry)
         sess.add_message(user_id, "assistant", reply)
-
-        MAX = 4000
-        chunks = [reply[i:i+MAX] for i in range(0, len(reply), MAX)]
-        await thinking_msg.edit_text(chunks[0])
-        for chunk in chunks[1:]:
-            await update.message.reply_text(chunk)
+        await _edit_or_send(thinking_msg, update, reply)
 
     except Exception as e:
         logger.error(f"Image analysis error: {e}")
