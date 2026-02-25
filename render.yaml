@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: nvidia-ai-telegram-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false          # set manually in Render dashboard
+      - key: NVIDIA_API_KEY
+        sync: false          # set manually in Render dashboard
+      - key: WEBHOOK_URL
+        sync: false          # set to your Render service URL, e.g. https://nvidia-ai-telegram-bot.onrender.com
+      - key: PORT
+        value: 8000
+    healthCheckPath: /health

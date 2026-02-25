@@ -1,0 +1,4 @@
+python-telegram-bot==21.6
+aiohttp==3.9.5
+requests==2.32.3
+pypdf==4.3.1
