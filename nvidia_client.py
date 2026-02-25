@@ -98,7 +98,18 @@ def chat(history: list[dict], model: str = CHAT_MODEL) -> Generator[str, None, N
         "c.drawString(100, 750, 'Hello World')\n"
         "c.save()\n"
         "output_filename = 'hello.pdf'\n"
-        "[/PYTHON_EXEC]\n"
+        "[/PYTHON_EXEC]\n\n"
+        "*** ADVANCED CAPABILITY: WEB SEARCH ***\n"
+        "You have access to a real-time web search tool. Your internal knowledge cutoff is around late 2023.\n"
+        "Whenever the user asks you about current events (e.g., 'Who is the PM in 2026?'), recent news, prices, weather, "
+        "or facts you are unsure about, you MUST search the web.\n"
+        "To perform a search, output exactly this block and STOP generating:\n"
+        "[WEB_SEARCH] your search query here [/WEB_SEARCH]\n\n"
+        "The system will execute the query and provide you with snippets from DuckDuckGo. You will then automatically "
+        "continue the conversation and provide the final answer based on those snippets.\n"
+        "EXAMPLE (User: 'What is NVIDIA stock price today?'):\n"
+        "Let me look up the latest price for you.\n"
+        "[WEB_SEARCH] NVIDIA NVDA stock price today [/WEB_SEARCH]\n"
     )
 
     # Ensure system prompt is first. If the first message in history is already a system prompt

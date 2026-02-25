@@ -303,54 +303,82 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     model = sess.get_model(user_id)
     
     try:
-        # Consume the streaming generator
-        full_reply = ""
-        last_edit_time = 0
-        
-        for chunk in ai.chat(history, model=model):
-            full_reply += chunk
-            
-            # Update Telegram message every 1.5 seconds to avoid rate limits
-            current_time = time.time()
-            if current_time - last_edit_time > 1.5:
-                # Truncate for streaming preview if it gets too long
-                preview_text = full_reply if len(full_reply) < MAX_MSG else full_reply[:MAX_MSG] + "..."
-                try:
-                    await thinking_msg.edit_text(preview_text + " ⏳")
-                    last_edit_time = current_time
-                except Exception:
-                    # Ignore harmless "message is not modified" errors during rapid streams
-                    pass
-
-        # Check if the AI generated a file execution block
-        exec_start = full_reply.find("[PYTHON_EXEC]")
-        exec_end = full_reply.find("[/PYTHON_EXEC]")
-        
+        # Consume the streaming generator inside a loop to support tool use (like Web Search)
         output_file = None
+        final_reply = ""
         
-        if exec_start != -1 and exec_end != -1 and exec_end > exec_start:
-            await thinking_msg.edit_text("⚙️ Generating your file, please wait...")
-            code = full_reply[exec_start + len("[PYTHON_EXEC]"):exec_end].strip()
+        while True:
+            full_reply = ""
+            last_edit_time = 0
             
-            # Fetch explicitly uploaded file bytes if any exist in session
-            file_bytes, _, _ = sess.get_doc_file(user_id)
-            input_bytes = file_bytes if file_bytes else b""
+            for chunk in ai.chat(history, model=model):
+                full_reply += chunk
+                
+                # Update Telegram message every 1.5 seconds to avoid rate limits
+                current_time = time.time()
+                if current_time - last_edit_time > 1.5:
+                    # Truncate for streaming preview if it gets too long
+                    preview_text = full_reply if len(full_reply) < MAX_MSG else full_reply[:MAX_MSG] + "..."
+                    try:
+                        await thinking_msg.edit_text(preview_text + " ⏳")
+                        last_edit_time = current_time
+                    except Exception:
+                        pass
             
-            output_bytes, output_filename, error = file_modifier.execute_python_code(code, input_bytes)
+            # 1. Check for Web Search Tool
+            search_start = full_reply.find("[WEB_SEARCH]")
+            search_end = full_reply.find("[/WEB_SEARCH]")
             
-            # Clean the reply to remove the python block so we don't spam the chat with it
-            clean_reply = full_reply[:exec_start].strip() + "\n" + full_reply[exec_end + len("[/PYTHON_EXEC]"):].strip()
-            final_reply = clean_reply.strip() or "✅ Task completed."
+            if search_start != -1 and search_end != -1 and search_end > search_start:
+                query = full_reply[search_start + len("[WEB_SEARCH]"):search_end].strip()
+                await thinking_msg.edit_text(f"🔍 Searching the web for: `{query}`...", parse_mode=ParseMode.MARKDOWN)
+                
+                import tools
+                search_results = tools.search_web(query)
+                
+                # We save the AI's partial thought
+                clean_thought = full_reply[:search_start].strip()
+                if clean_thought:
+                    sess.add_message(user_id, "assistant", clean_thought)
+                
+                # Inject the web results into history as systemic context
+                context_msg = f"Web search results for '{query}':\n\n{search_results}\n\nNow provide your final answer based on these results."
+                sess.add_message(user_id, "system", context_msg)
+                
+                # Re-fetch history and loop again!
+                history = sess.get_history(user_id)
+                continue
+
+            # 2. Check for File Execution Tool
+            exec_start = full_reply.find("[PYTHON_EXEC]")
+            exec_end = full_reply.find("[/PYTHON_EXEC]")
             
-            if error:
-                final_reply += f"\n\n⚠️ **Execution Error:**\n`{error[:500]}`"
-            elif output_bytes:
-                # Successfully generated the file! Send it up.
-                output_file = (output_bytes, output_filename)
+            if exec_start != -1 and exec_end != -1 and exec_end > exec_start:
+                await thinking_msg.edit_text("⚙️ Generating your file, please wait...")
+                code = full_reply[exec_start + len("[PYTHON_EXEC]"):exec_end].strip()
+                
+                # Fetch explicitly uploaded file bytes if any exist in session
+                file_bytes, _, _ = sess.get_doc_file(user_id)
+                input_bytes = file_bytes if file_bytes else b""
+                
+                output_bytes, output_filename, error = file_modifier.execute_python_code(code, input_bytes)
+                
+                # Clean the reply to remove the python block
+                clean_reply = full_reply[:exec_start].strip() + "\n" + full_reply[exec_end + len("[/PYTHON_EXEC]"):].strip()
+                final_reply = clean_reply.strip() or "✅ Task completed."
+                
+                if error:
+                    final_reply += f"\n\n⚠️ **Execution Error:**\n`{error[:500]}`"
+                elif output_bytes:
+                    output_file = (output_bytes, output_filename)
+                else:
+                    final_reply += "\n\n⚠️ No file was generated by the executed code."
             else:
-                final_reply += "\n\n⚠️ No file was generated by the executed code."
-        else:
-            final_reply = full_reply
+                # Normal terminal reply
+                final_reply = full_reply
+            
+            # If we get here (no further tools required), we break the loop
+            break
 
     except Exception as e:
         logger.error(f"NVIDIA API error: {e}")
