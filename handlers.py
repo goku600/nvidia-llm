@@ -1,9 +1,7 @@
-"""
-Telegram message/command handlers.
-"""
 import io
 import asyncio
 import logging
+import time
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.ext import ContextTypes
@@ -47,20 +45,6 @@ async def _check_allowed(update: Update) -> bool:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _mode_keyboard():
-    buttons = [
-        [InlineKeyboardButton("💬 Chat Assistant", callback_data="mode_chat"),
-         InlineKeyboardButton("👨‍💻 Code Assistant", callback_data="mode_code")],
-        [InlineKeyboardButton("📄 Document Q&A", callback_data="mode_doc"),
-         InlineKeyboardButton("🖼️ Image Analysis", callback_data="mode_image")],
-    ]
-    return InlineKeyboardMarkup(buttons)
-
-
-def _mode_label(mode: str) -> str:
-    return sess.MODES.get(mode, mode)
-
 
 MAX_MSG = 4000
 
@@ -167,24 +151,13 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sess.clear_session(user.id)
     await update.message.reply_text(
         f"👋 Hello, {user.first_name}! I'm your NVIDIA AI-powered assistant.\n\n"
-        "Just send me anything and I'll figure it out automatically:\n\n"
-        "💬 *Chat* — Ask me anything\n"
+        "Just send me anything and we can chat normally:\n\n"
+        "💬 *Chat* — Ask questions, brainstorm, or converse\n"
         "👨‍💻 *Code* — Write, debug & explain code\n"
-        "📄 *Files* — Send any PDF, Word, Excel, CSV, TXT... I'll read it!\n"
+        "📄 *Files* — Send any PDF, Word, Excel, CSV, TXT... I'll read it AND edit it for you!\n"
         "🖼️ *Images* — Send any photo and I'll analyze it!\n\n"
-        "No need to switch modes — I detect what you send automatically.\n"
-        "Use /mode to manually set a mode, or just start sending! 🚀",
+        "It's all one continuous conversation. 🚀",
         parse_mode=ParseMode.MARKDOWN,
-    )
-
-
-async def cmd_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await _check_allowed(update): return
-    current = sess.get_mode(update.effective_user.id)
-    await update.message.reply_text(
-        f"Current mode: *{_mode_label(current)}*\n\nSwitch to:",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=_mode_keyboard(),
     )
 
 
@@ -216,20 +189,19 @@ async def cmd_privacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "🔒 *Your Privacy & Data Summary*\n\n"
-        f"*Current mode:* {sess.MODES.get(info['mode'], info['mode'])}\n"
         f"*AI model:* `{info['model']}`\n"
         f"*Conversation:* {history_note}\n"
-        f"*Document:* {doc_status}\n\n"
+        f"*Document info context:* {doc_status}\n\n"
         "📋 *What we store (in RAM only):*\n"
-        "• Your conversation history (last 20 messages)\n"
+        "• Your continuous conversation history (last 20 messages)\n"
         "• Uploaded document text (auto-deleted after "
         f"{ttl_mins} min)\n"
-        "• Your selected mode & model\n\n"
+        "• Your selected model\n\n"
         "📋 *What we DON'T store:*\n"
         "• Files on disk (everything is in RAM)\n"
         "• Your Telegram messages permanently\n"
         "• Any data after bot restarts\n\n"
-        "⚠️ *Note:* Document text is sent to NVIDIA's API for processing.\n\n"
+        "⚠️ *Note:* Text is sent to NVIDIA's API for processing.\n\n"
         "🗑️ Use /clear to delete all your data immediately.",
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -239,13 +211,12 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await _check_allowed(update): return
     await update.message.reply_text(
         "🤖 *NVIDIA AI Telegram Bot — Help*\n\n"
-        "🪄 *Auto-detection:* Just send anything — no mode switching needed!\n"
-        "• Send a *photo* → auto image analysis\n"
-        "• Send a *file* → auto document Q&A\n"
-        "• Send *text* → chat (or doc Q&A if a file is loaded)\n\n"
+        "🪄 *Omni-modal Assistant:* It's all one conversation!\n"
+        "• Send a *photo* → it understands the image context\n"
+        "• Send a *file* → it reads the document into your chat history\n"
+        "• Ask to *create or modify* a file → I will write code and send the file to you!\n\n"
         "*Commands:*\n"
         "/start — Welcome message\n"
-        "/mode — Manually set a mode (chat/code/doc/image)\n"
         "/model — Switch the AI model\n"
         "/clear — Clear all your data\n"
         "/privacy — View & manage your stored data\n"
@@ -254,9 +225,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "PDF, Word (.docx), Excel (.xlsx), CSV, JSON, TXT, MD, PY and more\n\n"
         "*Tips:*\n"
         "• Bot remembers your last 20 messages\n"
-        "• Ask to *modify* a file → bot sends back the edited file!\n"
-        "• Use /clear to reset everything\n"
-        "• Use /model to switch AI models anytime",
+        "• You can ask me to generate a random PDF or process an Excel sheet, and I'll send the file straight back.",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -287,36 +256,8 @@ async def cmd_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ---------------------------------------------------------------------------
-# Callback: mode selection buttons
+# Callback
 # ---------------------------------------------------------------------------
-
-async def callback_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-    mode = query.data.replace("mode_", "")
-
-    if mode not in sess.MODES:
-        return
-
-    sess.set_mode(user_id, mode)
-    label = _mode_label(mode)
-
-    instructions = {
-        "chat":  "Just send me a message and we'll chat! I remember the conversation context.",
-        "code":  "Send me code to review/debug, describe what you want to build, or ask any programming question.",
-        "doc":   "Upload a file and I'll answer questions about it.\n📄 Supported: PDF, Word (.docx), Excel (.xlsx), CSV, JSON, TXT, MD, PY, and more!",
-        "image": "Send me a photo (with an optional caption/question) and I'll analyze it.",
-    }
-
-    await query.edit_message_text(
-        f"✅ Switched to *{label}* mode.\n\n{instructions[mode]}\n\n"
-        "Use /mode to switch anytime, /clear to reset history.",
-        parse_mode=ParseMode.MARKDOWN,
-    )
-
-
-async def callback_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
@@ -343,7 +284,6 @@ async def callback_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await _check_allowed(update): return
     user_id = update.effective_user.id
-    mode = sess.get_mode(user_id)
     user_text = update.message.text.strip()
 
     if not user_text:
@@ -361,126 +301,82 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sess.add_message(user_id, "user", user_text)
     history = sess.get_history(user_id)
     model = sess.get_model(user_id)
-
-    # --- AUTO-MODE DETECTION ---
-    # Priority: manual mode override > doc in memory > code detection > chat
-    doc_text = sess.get_doc_text(user_id)
-
-    # Determine effective mode
-    if mode in ("chat", "image"):
-        # If a doc is loaded and user is in chat/image mode, auto-switch to doc Q&A
-        effective_mode = "doc" if doc_text else mode
-    else:
-        effective_mode = mode  # respect explicit code/doc mode
-
+    
     try:
-        # --- CREATE FILE FROM SCRATCH ---
-        is_create, ext = _is_create_file_request(user_text)
-        if is_create and not doc_text:
-            await thinking_msg.edit_text(f"⚙️ Creating your {ext.upper()} file, please wait...")
-            output_bytes, output_filename, error = file_modifier.create_file(
-                user_request=user_text,
-                ext=ext,
-                model=model,
-            )
-            stop_typing.set()
-            typing_task.cancel()
+        # Consume the streaming generator
+        full_reply = ""
+        last_edit_time = 0
+        
+        for chunk in ai.chat(history, model=model):
+            full_reply += chunk
+            
+            # Update Telegram message every 1.5 seconds to avoid rate limits
+            current_time = time.time()
+            if current_time - last_edit_time > 1.5:
+                # Truncate for streaming preview if it gets too long
+                preview_text = full_reply if len(full_reply) < MAX_MSG else full_reply[:MAX_MSG] + "..."
+                try:
+                    await thinking_msg.edit_text(preview_text + " ⏳")
+                    last_edit_time = current_time
+                except Exception:
+                    # Ignore harmless "message is not modified" errors during rapid streams
+                    pass
+
+        # Check if the AI generated a file execution block
+        exec_start = full_reply.find("[PYTHON_EXEC]")
+        exec_end = full_reply.find("[/PYTHON_EXEC]")
+        
+        output_file = None
+        
+        if exec_start != -1 and exec_end != -1 and exec_end > exec_start:
+            await thinking_msg.edit_text("⚙️ Generating your file, please wait...")
+            code = full_reply[exec_start + len("[PYTHON_EXEC]"):exec_end].strip()
+            
+            # Fetch explicitly uploaded file bytes if any exist in session
+            file_bytes, _, _ = sess.get_doc_file(user_id)
+            input_bytes = file_bytes if file_bytes else b""
+            
+            output_bytes, output_filename, error = file_modifier.execute_python_code(code, input_bytes)
+            
+            # Clean the reply to remove the python block so we don't spam the chat with it
+            clean_reply = full_reply[:exec_start].strip() + "\n" + full_reply[exec_end + len("[/PYTHON_EXEC]"):].strip()
+            final_reply = clean_reply.strip() or "✅ Task completed."
+            
             if error:
-                reply = f"⚠️ Could not create the file:\n`{error[:500]}`"
-                await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
+                final_reply += f"\n\n⚠️ **Execution Error:**\n`{error[:500]}`"
+            elif output_bytes:
+                # Successfully generated the file! Send it up.
+                output_file = (output_bytes, output_filename)
             else:
-                await thinking_msg.edit_text(f"✅ File created! Sending it now...")
-                await update.message.reply_document(
-                    document=io.BytesIO(output_bytes),
-                    filename=output_filename,
-                    caption=f"✅ Here's your file: *{output_filename}*",
-                    parse_mode=ParseMode.MARKDOWN,
-                )
-            sess.add_message(user_id, "user", user_text)
-            sess.add_message(user_id, "assistant",
-                             f"[Created file: {output_filename}]" if not error else error)
-            return
-
-        if effective_mode == "doc" and doc_text:
-            # Check if user wants to modify the file
-            if _is_modification_request(user_text):
-                file_bytes, file_name, file_mime = sess.get_doc_file(user_id)
-                if file_bytes:
-                    await thinking_msg.edit_text("⚙️ Modifying your file, please wait...")
-                    output_bytes, output_filename, error = file_modifier.modify_file(
-                        doc_text=doc_text,
-                        file_bytes=file_bytes,
-                        filename=file_name or "document",
-                        user_request=user_text,
-                        model=model,
-                    )
-                    stop_typing.set()
-                    typing_task.cancel()
-                    if error:
-                        reply = f"⚠️ Could not modify the file:\n`{error[:500]}`"
-                        await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
-                    else:
-                        await thinking_msg.edit_text("✅ File modified! Sending it now...")
-                        await update.message.reply_document(
-                            document=io.BytesIO(output_bytes),
-                            filename=output_filename,
-                            caption=f"✅ Here's your modified file: *{output_filename}*",
-                            parse_mode=ParseMode.MARKDOWN,
-                        )
-                    sess.add_message(user_id, "user", user_text)
-                    sess.add_message(user_id, "assistant",
-                                     f"[Modified file sent: {output_filename}]" if not error else reply)
-                    return
-            reply = ai.document_qa(doc_text, history, model=model)
-            if AUTO_DELETE_DOC_AFTER_ANSWER:
-                sess.clear_doc(user_id)
-
-        elif effective_mode == "code":
-            reply = ai.code_assist(history, model=model)
-
-        elif effective_mode == "image":
-            stop_typing.set()
-            typing_task.cancel()
-            # Check if user is asking to modify an image
-            modify_image_keywords = [
-                "edit", "modify", "change", "crop", "resize", "rotate", "filter",
-                "blur", "sharpen", "convert", "remove background", "make it",
-                "turn it", "transform", "enhance", "fix the image", "edit the image",
-            ]
-            text_lower = user_text.lower()
-            if any(kw in text_lower for kw in modify_image_keywords):
-                reply = (
-                    "🖼️ I can *analyze* images but I can't edit or modify them yet.\n\n"
-                    "What I *can* do:\n"
-                    "• Describe what's in the image\n"
-                    "• Answer questions about the image\n"
-                    "• Extract text from images (OCR)\n"
-                    "• Identify objects, people, scenes\n\n"
-                    "Image editing support may be added in the future! 🔜"
-                )
-            else:
-                reply = "🖼️ Please send a photo and I'll analyze it for you!"
-            sess.add_message(user_id, "assistant", reply)
-            await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
-            return
-
+                final_reply += "\n\n⚠️ No file was generated by the executed code."
         else:
-            reply = ai.chat(history, model=model)
+            final_reply = full_reply
 
     except Exception as e:
         logger.error(f"NVIDIA API error: {e}")
         stop_typing.set()
         typing_task.cancel()
-        reply = f"⚠️ Sorry, I ran into an error talking to the AI:\n`{e}`"
-        await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
+        final_reply = f"⚠️ Sorry, I ran into an error talking to the AI:\n`{e}`"
+        await thinking_msg.edit_text(final_reply, parse_mode=ParseMode.MARKDOWN)
         return
 
     finally:
         stop_typing.set()
         typing_task.cancel()
 
-    sess.add_message(user_id, "assistant", reply)
-    await _edit_or_send(thinking_msg, update, reply)
+    # Log assistant response to history
+    sess.add_message(user_id, "assistant", final_reply)
+    await _edit_or_send(thinking_msg, update, final_reply)
+    
+    # If a file was generated, send it as a follow-up
+    if output_file:
+        out_b, out_name = output_file
+        await update.message.reply_document(
+            document=io.BytesIO(out_b),
+            filename=out_name,
+            caption=f"✅ Here's your file: *{out_name}*",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -491,7 +387,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await _check_allowed(update): return
     user_id = update.effective_user.id
 
-    # Auto-mode: always analyze photos regardless of current mode
     thinking_msg: Message = await update.message.reply_text("⏳ Analyzing image...")
 
     stop_typing = asyncio.Event()
@@ -499,22 +394,36 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _keep_typing(context.bot, update.effective_chat.id, stop_typing)
     )
 
-    # Get highest resolution photo
     photo = update.message.photo[-1]
-    caption = update.message.caption or ""
+    caption = update.message.caption or "Describe this image in detail."
 
     try:
+        from config import VISION_MODEL
+        import base64
+        
         file = await context.bot.get_file(photo.file_id)
         file_bytes = bytes(await file.download_as_bytearray())
-        mime_type = "image/jpeg"  # Telegram photos are always JPEG
+        image_b64 = base64.b64encode(file_bytes).decode('utf-8')
 
         history = sess.get_history(user_id)
-        prompt = caption or "Describe this image in detail."
-        reply = ai.image_analysis(file_bytes, mime_type, prompt, history)
+        
+        # Build the multimodal content payload
+        multimodal_content = [
+            {"type": "text", "text": caption},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}}
+        ]
+        
+        # We don't save the massive base64 string to the session history to save RAM.
+        # We just log that an image was sent for context.
+        sess.add_message(user_id, "user", f"[User sent an image: {caption}]")
+        
+        # Create a temporary history just for this API call containing the actual image
+        temp_history = history.copy()
+        temp_history.append({"role": "user", "content": multimodal_content})
 
-        # Log image interaction in history as text
-        user_entry = f"[User sent an image{': ' + caption if caption else ''}]"
-        sess.add_message(user_id, "user", user_entry)
+        # Process via the unified chat function, forcing the vision model
+        reply = ai.chat(temp_history, model=VISION_MODEL)
+
         sess.add_message(user_id, "assistant", reply)
         await _edit_or_send(thinking_msg, update, reply)
 
@@ -537,7 +446,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await _check_allowed(update): return
     user_id = update.effective_user.id
 
-    # Auto-mode: always process documents regardless of current mode
     thinking_msg: Message = await update.message.reply_text("⏳ Processing document...")
 
     stop_typing = asyncio.Event()
@@ -571,12 +479,18 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"⚠️ Document is large — I'll use the first {MAX_DOC_CHARS:,} characters."
             )
 
+        # Inject into unified history
+        doc_entry = f"The user uploaded a document named '{file_name}'. Here is its content:\n\n{text}"
+        sess.add_message(user_id, "system", doc_entry)
+        
+        # We also store the bytes temporarily in case a subsequent script wants to manipulate the raw file
         sess.set_doc_text(user_id, text, filename=file_name, file_bytes=bytes(file_bytes), mime=mime)
+
         word_count = len(text.split())
         await thinking_msg.edit_text(
-            f"✅ *{file_name}* loaded successfully!\n"
+            f"✅ *{file_name}* loaded into context!\n"
             f"📊 ~{word_count:,} words extracted.\n\n"
-            "Now ask me anything about it!",
+            "I remember this document now. What would you like to do with it?",
             parse_mode=ParseMode.MARKDOWN,
         )
 

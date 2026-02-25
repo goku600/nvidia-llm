@@ -1,28 +1,16 @@
 """
-In-memory session store for per-user conversation history and mode tracking.
+In-memory session store for per-user conversation history.
 On Render free tier, memory is reset when the instance restarts — that's acceptable.
 
 Privacy features:
 - Document text is stored with a TTL (auto-expires after DOC_TTL_SECONDS)
-- Documents can be auto-deleted after answering a question
 - Users can clear all their data with /clear or /privacy
 """
 import time
 from collections import defaultdict
 from config import MAX_HISTORY_MESSAGES, CHAT_MODEL, DOC_TTL_SECONDS
 
-# Supported modes
-MODES = {
-    "chat":  "💬 Chat Assistant",
-    "code":  "👨‍💻 Code Assistant",
-    "doc":   "📄 Document Q&A",
-    "image": "🖼️ Image Analysis",
-}
-
-DEFAULT_MODE = "chat"
-
 # user_id -> {
-#   "mode": str,
 #   "history": list[dict],
 #   "doc_text": str|None,
 #   "doc_name": str|None,
@@ -31,7 +19,6 @@ DEFAULT_MODE = "chat"
 #   "started_at": float,             # unix timestamp when session started
 # }
 _sessions: dict[int, dict] = defaultdict(lambda: {
-    "mode": DEFAULT_MODE,
     "history": [],
     "doc_text": None,
     "doc_name": None,
@@ -43,18 +30,6 @@ _sessions: dict[int, dict] = defaultdict(lambda: {
 
 def get_session(user_id: int) -> dict:
     return _sessions[user_id]
-
-
-def set_mode(user_id: int, mode: str):
-    _sessions[user_id]["mode"] = mode
-    _sessions[user_id]["history"] = []
-    _sessions[user_id]["doc_text"] = None
-    _sessions[user_id]["doc_name"] = None
-    _sessions[user_id]["doc_uploaded_at"] = None
-
-
-def get_mode(user_id: int) -> str:
-    return _sessions[user_id]["mode"]
 
 
 def add_message(user_id: int, role: str, content: str):
@@ -75,7 +50,7 @@ def set_doc_text(user_id: int, text: str, filename: str = "document",
     _sessions[user_id]["doc_bytes"] = file_bytes   # original raw bytes
     _sessions[user_id]["doc_mime"] = mime
     _sessions[user_id]["doc_uploaded_at"] = time.time()
-    _sessions[user_id]["history"] = []  # reset Q&A history for new doc
+    # We DO NOT clear history here anymore! Gemini parity keeps context.
 
 
 def get_doc_file(user_id: int) -> tuple[bytes | None, str | None, str | None]:
@@ -92,10 +67,7 @@ def get_doc_text(user_id: int) -> str | None:
     uploaded_at = session.get("doc_uploaded_at")
     if uploaded_at and (time.time() - uploaded_at) > DOC_TTL_SECONDS:
         # TTL expired — auto-clear
-        session["doc_text"] = None
-        session["doc_name"] = None
-        session["doc_uploaded_at"] = None
-        session["history"] = []
+        clear_doc(user_id)
         return None
     return session["doc_text"]
 
@@ -107,7 +79,6 @@ def clear_doc(user_id: int):
     _sessions[user_id]["doc_bytes"] = None
     _sessions[user_id]["doc_mime"] = None
     _sessions[user_id]["doc_uploaded_at"] = None
-    _sessions[user_id]["history"] = []
 
 
 def get_model(user_id: int) -> str:
@@ -129,7 +100,6 @@ def get_privacy_info(user_id: int) -> dict:
         doc_expires_in = max(0, int(remaining))
 
     return {
-        "mode": session["mode"],
         "model": session["model"],
         "history_count": len(session["history"]),
         "has_doc": session["doc_text"] is not None,
@@ -141,7 +111,6 @@ def get_privacy_info(user_id: int) -> dict:
 
 def clear_session(user_id: int):
     _sessions[user_id] = {
-        "mode": DEFAULT_MODE,
         "history": [],
         "doc_text": None,
         "doc_name": None,

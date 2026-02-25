@@ -16,8 +16,10 @@ def _build_headers(stream: bool = False):
     }
 
 
-def _post(payload: dict) -> str:
-    """Send a streaming request to NVIDIA API and return the full assembled reply."""
+from typing import Generator
+
+def _post(payload: dict) -> Generator[str, None, None]:
+    """Send a streaming request to NVIDIA API and yield text chunks."""
     payload = {**payload, "stream": True}
     headers = _build_headers(stream=True)
     response = requests.post(
@@ -26,7 +28,6 @@ def _post(payload: dict) -> str:
     )
     response.raise_for_status()
 
-    full_text = []
     for line in response.iter_lines():
         if not line:
             continue
@@ -40,11 +41,9 @@ def _post(payload: dict) -> str:
                 delta = data["choices"][0].get("delta", {})
                 content = delta.get("content", "")
                 if content:
-                    full_text.append(content)
+                    yield content
             except (json.JSONDecodeError, KeyError, IndexError):
                 continue
-
-    return "".join(full_text)
 
 
 def _base_payload(model: str, messages: list, thinking: bool = False) -> dict:
@@ -57,7 +56,7 @@ def _base_payload(model: str, messages: list, thinking: bool = False) -> dict:
         "top_k": TOP_K,
         "presence_penalty": 0,
         "repetition_penalty": 1,
-        "stream": False,  # overridden in _post
+        "stream": True,
     }
     if thinking:
         payload["chat_template_kwargs"] = {"enable_thinking": True}
@@ -65,55 +64,50 @@ def _base_payload(model: str, messages: list, thinking: bool = False) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Chat
+# Unified Omni-Modal Chat
 # ---------------------------------------------------------------------------
 
-def chat(history: list[dict], model: str = CHAT_MODEL) -> str:
+def chat(history: list[dict], model: str = CHAT_MODEL) -> Generator[str, None, None]:
     """
-    history: list of {"role": "user"|"assistant", "content": str}
-    Returns the assistant reply.
+    history: list of {"role": "user"|"assistant"|"system", "content": str}
+    Yields chunks of the assistant's reply.
     """
-    payload = _base_payload(model, history)
-    return _post(payload)
+    system_prompt = (
+        "You are an expert NVIDIA AI Assistant, a unified omni-modal AI. "
+        "You help users with general chat, coding, data analysis, and document Q&A seamlessly. "
+        "The user may upload images or documents, which will appear in the chat history.\n\n"
+        "*** ADVANCED CAPABILITY: FILE GENERATION & MODIFICATION ***\n"
+        "You have the ability to execute Python code in a secure sandbox to generate or modify files "
+        "if the user explicitly asks for a file to be returned, modified, converted, or exported.\n\n"
+        "When the user asks you to create a file (e.g., 'generate an excel file', 'give me a pdf'), "
+        "or edit an existing one, you MUST output the exact Python code needed to do it inside "
+        "a special `[PYTHON_EXEC]` block.\n\n"
+        "RULES FOR `[PYTHON_EXEC]`:\n"
+        "1. Start the block with exactly `[PYTHON_EXEC]` on its own line.\n"
+        "2. End the block with exactly `[/PYTHON_EXEC]` on its own line.\n"
+        "3. Allowed libraries: io, json, csv, re, math, datetime, collections, openpyxl, pypdf, docx, PIL, reportlab.\n"
+        "4. **No other imports** or network/disk access is allowed.\n"
+        "5. If a user previously uploaded a document, its raw bytes are available in the variable `input_bytes` (type: bytes).\n"
+        "6. Write your output to the pre-existing variable `output_buffer` (type: io.BytesIO).\n"
+        "7. Set the pre-existing variable `output_filename` (type: str) to the desired filename.\n\n"
+        "EXAMPLE (User: 'Create a PDF with Hello World'):\n"
+        "Sure, I'll generate that PDF for you right now.\n"
+        "[PYTHON_EXEC]\n"
+        "from reportlab.pdfgen import canvas\n"
+        "c = canvas.Canvas(output_buffer)\n"
+        "c.drawString(100, 750, 'Hello World')\n"
+        "c.save()\n"
+        "output_filename = 'hello.pdf'\n"
+        "[/PYTHON_EXEC]\n"
+    )
 
-
-# ---------------------------------------------------------------------------
-# Code Assistant
-# ---------------------------------------------------------------------------
-
-def code_assist(history: list[dict], model: str = CODE_MODEL) -> str:
-    system = {
-        "role": "system",
-        "content": (
-            "You are an expert software engineer and code assistant. "
-            "Help the user write, debug, review, and explain code. "
-            "Always provide clear explanations alongside any code you write. "
-            "Format code blocks with the appropriate language tag."
-        ),
-    }
-    messages = [system] + history
+    # Ensure system prompt is first. If the first message in history is already a system prompt
+    # (e.g. from an uploaded doc), we prepend a dedicated system message.
+    messages = [{"role": "system", "content": system_prompt}] + history
     payload = _base_payload(model, messages)
-    return _post(payload)
-
-
-# ---------------------------------------------------------------------------
-# Document Q&A
-# ---------------------------------------------------------------------------
-
-def document_qa(document_text: str, history: list[dict], model: str = DOC_MODEL) -> str:
-    system = {
-        "role": "system",
-        "content": (
-            "You are a helpful document analysis assistant. "
-            "The user has provided a document. Answer their questions "
-            "accurately based on the document content. "
-            "If the answer is not in the document, say so clearly.\n\n"
-            f"--- DOCUMENT START ---\n{document_text}\n--- DOCUMENT END ---"
-        ),
-    }
-    messages = [system] + history
-    payload = _base_payload(model, messages)
-    return _post(payload)
+    
+    for chunk in _post(payload):
+        yield chunk
 
 
 # ---------------------------------------------------------------------------
