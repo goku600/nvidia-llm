@@ -97,14 +97,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sess.clear_session(user.id)
     await update.message.reply_text(
         f"👋 Hello, {user.first_name}! I'm your NVIDIA AI-powered assistant.\n\n"
-        "I can do all of the following:\n"
-        "💬 *Chat* — General conversation & questions\n"
+        "Just send me anything and I'll figure it out automatically:\n\n"
+        "💬 *Chat* — Ask me anything\n"
         "👨‍💻 *Code* — Write, debug & explain code\n"
-        "📄 *Document Q&A* — Upload a file and ask questions\n"
-        "🖼️ *Image Analysis* — Send a photo and ask about it\n\n"
-        "Choose a mode to get started:",
+        "📄 *Files* — Send any PDF, Word, Excel, CSV, TXT... I'll read it!\n"
+        "🖼️ *Images* — Send any photo and I'll analyze it!\n\n"
+        "No need to switch modes — I detect what you send automatically.\n"
+        "Use /mode to manually set a mode, or just start sending! 🚀",
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=_mode_keyboard(),
     )
 
 
@@ -169,23 +169,24 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await _check_allowed(update): return
     await update.message.reply_text(
         "🤖 *NVIDIA AI Telegram Bot — Help*\n\n"
+        "🪄 *Auto-detection:* Just send anything — no mode switching needed!\n"
+        "• Send a *photo* → auto image analysis\n"
+        "• Send a *file* → auto document Q&A\n"
+        "• Send *text* → chat (or doc Q&A if a file is loaded)\n\n"
         "*Commands:*\n"
-        "/start — Welcome message & mode picker\n"
-        "/mode — Switch between assistant modes\n"
+        "/start — Welcome message\n"
+        "/mode — Manually set a mode (chat/code/doc/image)\n"
         "/model — Switch the AI model\n"
         "/clear — Clear all your data\n"
         "/privacy — View & manage your stored data\n"
         "/help — Show this help message\n\n"
-        "*Modes:*\n"
-        "💬 *Chat* — Ask anything, have a conversation\n"
-        "👨‍💻 *Code* — Get help with programming\n"
-        "📄 *Doc Q&A* — Upload .txt/.pdf/.py etc., then ask questions\n"
-        "🖼️ *Image* — Send a photo (+ optional caption) for analysis\n\n"
+        "*Supported file types:*\n"
+        "PDF, Word (.docx), Excel (.xlsx), CSV, JSON, TXT, MD, PY and more\n\n"
         "*Tips:*\n"
-        "• The bot remembers your last 20 messages per mode\n"
-        "• Use /clear to reset the conversation\n"
-        "• Use /mode to switch modes anytime\n"
-        "• Use /model to switch the AI model anytime",
+        "• Bot remembers your last 20 messages\n"
+        "• Ask to *modify* a file → bot sends back the edited file!\n"
+        "• Use /clear to reset everything\n"
+        "• Use /model to switch AI models anytime",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -291,26 +292,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     history = sess.get_history(user_id)
     model = sess.get_model(user_id)
 
+    # --- AUTO-MODE DETECTION ---
+    # Priority: manual mode override > doc in memory > code detection > chat
+    doc_text = sess.get_doc_text(user_id)
+
+    # Determine effective mode
+    if mode in ("chat", "image"):
+        # If a doc is loaded and user is in chat/image mode, auto-switch to doc Q&A
+        effective_mode = "doc" if doc_text else mode
+    else:
+        effective_mode = mode  # respect explicit code/doc mode
+
     try:
-        if mode == "chat":
-            reply = ai.chat(history, model=model)
-
-        elif mode == "code":
-            reply = ai.code_assist(history, model=model)
-
-        elif mode == "doc":
-            doc_text = sess.get_doc_text(user_id)
-            if not doc_text:
-                stop_typing.set()
-                typing_task.cancel()
-                reply = (
-                    "📄 You're in *Document Q&A* mode but haven't uploaded a document yet.\n"
-                    "Please upload a file first (.txt, .pdf, .py, .md, etc.)."
-                )
-                sess.add_message(user_id, "assistant", reply)
-                await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
-                return
-
+        if effective_mode == "doc" and doc_text:
             # Check if user wants to modify the file
             if _is_modification_request(user_text):
                 file_bytes, file_name, file_mime = sess.get_doc_file(user_id)
@@ -337,22 +331,22 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             parse_mode=ParseMode.MARKDOWN,
                         )
                     sess.add_message(user_id, "user", user_text)
-                    sess.add_message(user_id, "assistant", f"[Modified file sent: {output_filename}]" if not error else reply)
+                    sess.add_message(user_id, "assistant",
+                                     f"[Modified file sent: {output_filename}]" if not error else reply)
                     return
-
             reply = ai.document_qa(doc_text, history, model=model)
             if AUTO_DELETE_DOC_AFTER_ANSWER:
                 sess.clear_doc(user_id)
 
-        elif mode == "image":
+        elif effective_mode == "code":
+            reply = ai.code_assist(history, model=model)
+
+        elif effective_mode == "image":
             stop_typing.set()
             typing_task.cancel()
-            reply = (
-                "🖼️ You're in *Image Analysis* mode.\n"
-                "Please send a photo (you can add a caption with your question)."
-            )
+            reply = "🖼️ Please send a photo and I'll analyze it for you!"
             sess.add_message(user_id, "assistant", reply)
-            await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
+            await thinking_msg.edit_text(reply)
             return
 
         else:
@@ -387,16 +381,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await _check_allowed(update): return
     user_id = update.effective_user.id
-    mode = sess.get_mode(user_id)
 
-    if mode != "image":
-        await update.message.reply_text(
-            f"📷 I received a photo, but you're in *{_mode_label(mode)}* mode.\n"
-            "Switch to 🖼️ *Image Analysis* mode via /mode to analyze images.",
-            parse_mode=ParseMode.MARKDOWN,
-        )
-        return
-
+    # Auto-mode: always analyze photos regardless of current mode
     thinking_msg: Message = await update.message.reply_text("⏳ Analyzing image...")
 
     stop_typing = asyncio.Event()
@@ -445,16 +431,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await _check_allowed(update): return
     user_id = update.effective_user.id
-    mode = sess.get_mode(user_id)
 
-    if mode != "doc":
-        await update.message.reply_text(
-            f"📎 I received a file, but you're in *{_mode_label(mode)}* mode.\n"
-            "Switch to 📄 *Document Q&A* mode via /mode to analyze documents.",
-            parse_mode=ParseMode.MARKDOWN,
-        )
-        return
-
+    # Auto-mode: always process documents regardless of current mode
     thinking_msg: Message = await update.message.reply_text("⏳ Processing document...")
 
     stop_typing = asyncio.Event()
