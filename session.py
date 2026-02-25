@@ -68,11 +68,20 @@ def get_history(user_id: int) -> list[dict]:
     return _sessions[user_id]["history"]
 
 
-def set_doc_text(user_id: int, text: str, filename: str = "document"):
+def set_doc_text(user_id: int, text: str, filename: str = "document",
+                 file_bytes: bytes | None = None, mime: str | None = None):
     _sessions[user_id]["doc_text"] = text
     _sessions[user_id]["doc_name"] = filename
+    _sessions[user_id]["doc_bytes"] = file_bytes   # original raw bytes
+    _sessions[user_id]["doc_mime"] = mime
     _sessions[user_id]["doc_uploaded_at"] = time.time()
     _sessions[user_id]["history"] = []  # reset Q&A history for new doc
+
+
+def get_doc_file(user_id: int) -> tuple[bytes | None, str | None, str | None]:
+    """Return (file_bytes, filename, mime) for the stored document."""
+    s = _sessions[user_id]
+    return s.get("doc_bytes"), s.get("doc_name"), s.get("doc_mime")
 
 
 def get_doc_text(user_id: int) -> str | None:
@@ -95,6 +104,8 @@ def clear_doc(user_id: int):
     """Wipe only the document from memory."""
     _sessions[user_id]["doc_text"] = None
     _sessions[user_id]["doc_name"] = None
+    _sessions[user_id]["doc_bytes"] = None
+    _sessions[user_id]["doc_mime"] = None
     _sessions[user_id]["doc_uploaded_at"] = None
     _sessions[user_id]["history"] = []
 
@@ -134,6 +145,8 @@ def clear_session(user_id: int):
         "history": [],
         "doc_text": None,
         "doc_name": None,
+        "doc_bytes": None,
+        "doc_mime": None,
         "doc_uploaded_at": None,
         "model": CHAT_MODEL,
         "started_at": time.time(),

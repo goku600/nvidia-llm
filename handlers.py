@@ -11,6 +11,7 @@ from telegram.constants import ParseMode, ChatAction
 
 import nvidia_client as ai
 import session as sess
+import file_modifier
 from config import SELECTABLE_MODELS, ALLOWED_USER_IDS, AUTO_DELETE_DOC_AFTER_ANSWER, DOC_TTL_SECONDS
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,20 @@ async def _send_long(update: Update, text: str):
     chunks = [text[i:i+MAX] for i in range(0, len(text), MAX)]
     for chunk in chunks:
         await update.effective_message.reply_text(chunk)
+
+
+def _is_modification_request(text: str) -> bool:
+    """Detect if the user wants to modify/edit the file rather than just ask about it."""
+    keywords = [
+        "modify", "edit", "change", "update", "add", "remove", "delete", "insert",
+        "rename", "replace", "fix", "correct", "reformat", "convert", "transform",
+        "sort", "filter", "calculate", "compute", "sum", "total", "average",
+        "create", "generate", "make", "write", "save", "export", "download",
+        "send", "give me", "provide", "produce", "output", "return",
+        "append", "prepend", "merge", "split", "format", "clean", "fill",
+    ]
+    text_lower = text.lower()
+    return any(kw in text_lower for kw in keywords)
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +310,36 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 sess.add_message(user_id, "assistant", reply)
                 await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
                 return
+
+            # Check if user wants to modify the file
+            if _is_modification_request(user_text):
+                file_bytes, file_name, file_mime = sess.get_doc_file(user_id)
+                if file_bytes:
+                    await thinking_msg.edit_text("⚙️ Modifying your file, please wait...")
+                    output_bytes, output_filename, error = file_modifier.modify_file(
+                        doc_text=doc_text,
+                        file_bytes=file_bytes,
+                        filename=file_name or "document",
+                        user_request=user_text,
+                        model=model,
+                    )
+                    stop_typing.set()
+                    typing_task.cancel()
+                    if error:
+                        reply = f"⚠️ Could not modify the file:\n`{error[:500]}`"
+                        await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
+                    else:
+                        await thinking_msg.edit_text("✅ File modified! Sending it now...")
+                        await update.message.reply_document(
+                            document=io.BytesIO(output_bytes),
+                            filename=output_filename,
+                            caption=f"✅ Here's your modified file: *{output_filename}*",
+                            parse_mode=ParseMode.MARKDOWN,
+                        )
+                    sess.add_message(user_id, "user", user_text)
+                    sess.add_message(user_id, "assistant", f"[Modified file sent: {output_filename}]" if not error else reply)
+                    return
+
             reply = ai.document_qa(doc_text, history, model=model)
             if AUTO_DELETE_DOC_AFTER_ANSWER:
                 sess.clear_doc(user_id)
@@ -443,7 +488,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"⚠️ Document is large — I'll use the first {MAX_DOC_CHARS:,} characters."
             )
 
-        sess.set_doc_text(user_id, text, filename=file_name)
+        sess.set_doc_text(user_id, text, filename=file_name, file_bytes=bytes(file_bytes), mime=mime)
         word_count = len(text.split())
         await thinking_msg.edit_text(
             f"✅ *{file_name}* loaded successfully!\n"
