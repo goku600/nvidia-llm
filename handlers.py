@@ -159,7 +159,7 @@ async def callback_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     instructions = {
         "chat":  "Just send me a message and we'll chat! I remember the conversation context.",
         "code":  "Send me code to review/debug, describe what you want to build, or ask any programming question.",
-        "doc":   "Upload a document (.txt, .pdf, .py, .md, .csv, etc.) and I'll answer questions about it.",
+        "doc":   "Upload a file and I'll answer questions about it.\n📄 Supported: PDF, Word (.docx), Excel (.xlsx), CSV, JSON, TXT, MD, PY, and more!",
         "image": "Send me a photo (with an optional caption/question) and I'll analyze it.",
     }
 
@@ -381,7 +381,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sess.set_doc_text(user_id, text)
         word_count = len(text.split())
         await thinking_msg.edit_text(
-            f"✅ Document *{file_name}* loaded successfully!\n"
+            f"✅ *{file_name}* loaded successfully!\n"
             f"📊 ~{word_count:,} words extracted.\n\n"
             "Now ask me anything about it!",
             parse_mode=ParseMode.MARKDOWN,
@@ -399,25 +399,74 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def _extract_text(data: bytes, filename: str, mime: str) -> str:
-    """Extract plain text from file bytes. Supports txt, pdf, and common text formats."""
+    """Extract plain text from file bytes. Supports txt, pdf, docx, xlsx, csv, json, md, py, etc."""
     fname_lower = filename.lower()
 
-    # PDF extraction
+    # PDF
     if fname_lower.endswith(".pdf") or "pdf" in mime:
         try:
             import pypdf
             reader = pypdf.PdfReader(io.BytesIO(data))
-            return "\n".join(page.extract_text() or "" for page in reader.pages)
-        except ImportError:
-            return "[pypdf not installed — PDF support unavailable. Use .txt files.]"
+            pages = [page.extract_text() or "" for page in reader.pages]
+            return "\n\n".join(p for p in pages if p.strip())
         except Exception as e:
             return f"[PDF extraction error: {e}]"
 
-    # Everything else: try to decode as UTF-8 text
+    # Word (.docx)
+    if fname_lower.endswith(".docx") or "wordprocessingml" in mime or "msword" in mime:
+        try:
+            import docx
+            doc = docx.Document(io.BytesIO(data))
+            parts = []
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    parts.append(para.text)
+            # Also extract tables
+            for table in doc.tables:
+                for row in table.rows:
+                    parts.append("\t".join(cell.text for cell in row.cells))
+            return "\n".join(parts)
+        except Exception as e:
+            return f"[Word extraction error: {e}]"
+
+    # Excel (.xlsx, .xls)
+    if fname_lower.endswith((".xlsx", ".xls")) or "spreadsheet" in mime or "excel" in mime:
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+            parts = []
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                parts.append(f"=== Sheet: {sheet_name} ===")
+                for row in ws.iter_rows(values_only=True):
+                    row_str = "\t".join(str(c) if c is not None else "" for c in row)
+                    if row_str.strip():
+                        parts.append(row_str)
+            return "\n".join(parts)
+        except Exception as e:
+            return f"[Excel extraction error: {e}]"
+
+    # CSV — decode as text
+    if fname_lower.endswith(".csv") or "csv" in mime:
+        try:
+            return data.decode("utf-8")
+        except UnicodeDecodeError:
+            return data.decode("latin-1", errors="replace")
+
+    # JSON — decode and pretty print
+    if fname_lower.endswith(".json") or "json" in mime:
+        try:
+            import json
+            parsed = json.loads(data.decode("utf-8"))
+            return json.dumps(parsed, indent=2, ensure_ascii=False)
+        except Exception:
+            return data.decode("utf-8", errors="replace")
+
+    # Everything else: plain text (py, md, txt, html, yaml, toml, etc.)
     try:
         return data.decode("utf-8")
     except UnicodeDecodeError:
         try:
             return data.decode("latin-1")
         except Exception:
-            return ""
+            return "[Could not extract text from this file type.]"
