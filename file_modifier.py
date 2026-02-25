@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Allowed modules inside sandboxed execution
 SAFE_MODULES = {
     "io", "json", "csv", "re", "math", "datetime", "collections",
-    "openpyxl", "pypdf", "docx", "PIL",
+    "openpyxl", "pypdf", "docx", "PIL", "reportlab",
 }
 
 EXECUTION_TIMEOUT = 30  # seconds
@@ -42,11 +42,12 @@ Your task: Write a complete Python script that:
 4. Sets `output_filename` (a string variable) to the output filename (e.g. "modified_{filename}")
 
 Rules:
-- Use only these libraries: io, json, csv, re, math, datetime, collections, openpyxl, pypdf, docx, PIL
+- Use only these libraries: io, json, csv, re, math, datetime, collections, openpyxl, pypdf, docx, PIL, reportlab
 - Do NOT use open(), os, sys, subprocess, requests, or any network/file system calls
 - Read from `input_bytes` (bytes), write to `output_buffer` (BytesIO)
 - For Excel: use openpyxl
 - For Word: use python-docx (import docx)
+- For PDF creation/conversion: use reportlab (e.g., from reportlab.pdfgen import canvas; c = canvas.Canvas(output_buffer); c.drawString(100, 750, "Content"); c.save())
 - For CSV/TXT/JSON/MD/PY: use string manipulation and write encoded text to output_buffer
 - Set output_filename to a descriptive name like "modified_report.xlsx"
 - The script must be complete and runnable
@@ -146,11 +147,18 @@ Your task: Write a complete Python script that:
 3. Sets `output_filename` (a string variable) to a descriptive filename with .{ext} extension
 
 Rules:
-- Use only these libraries: io, json, csv, re, math, datetime, collections, openpyxl, docx
+- Use only these libraries: io, json, csv, re, math, datetime, collections, openpyxl, docx, reportlab
 - Do NOT use open(), os, sys, subprocess, requests, or any network/file system calls
 - Write to `output_buffer` (BytesIO) only
 - For .xlsx: use openpyxl
 - For .docx: use python-docx (import docx)
+- For .pdf: use reportlab ONLY. Example:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+    c = canvas.Canvas(output_buffer, pagesize=letter)
+    c.drawString(100, 750, "Hello World")
+    c.save()
+    output_filename = "document.pdf"
 - For .csv, .txt, .json, .md, .py, .html, .js, .yaml, .xml: encode as UTF-8 and write to output_buffer
 - Set output_filename to a good descriptive name like "numbers_1_to_99999.txt"
 - The script must be complete and runnable
