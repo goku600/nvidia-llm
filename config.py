@@ -36,3 +36,17 @@ HOST = "0.0.0.0"
 
 # Per-user history limit (messages kept in memory)
 MAX_HISTORY_MESSAGES = 20
+
+# Privacy & Security
+# Comma-separated Telegram user IDs allowed to use the bot. Leave empty to allow everyone.
+# Example: "123456789,987654321"
+ALLOWED_USER_IDS_STR = os.getenv("ALLOWED_USER_IDS", "")
+ALLOWED_USER_IDS = set(
+    int(uid.strip()) for uid in ALLOWED_USER_IDS_STR.split(",") if uid.strip().isdigit()
+)
+
+# How long (in seconds) to keep uploaded document text in memory (default: 30 minutes)
+DOC_TTL_SECONDS = int(os.getenv("DOC_TTL_SECONDS", 1800))
+
+# Auto-delete document from memory after answering a question
+AUTO_DELETE_DOC_AFTER_ANSWER = os.getenv("AUTO_DELETE_DOC_AFTER_ANSWER", "false").lower() == "true"

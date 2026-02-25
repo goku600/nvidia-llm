@@ -21,6 +21,7 @@ from handlers import (
     cmd_mode,
     cmd_model,
     cmd_clear,
+    cmd_privacy,
     cmd_help,
     callback_mode,
     callback_model,
@@ -50,6 +51,7 @@ async def main():
     app.add_handler(CommandHandler("mode", cmd_mode))
     app.add_handler(CommandHandler("model", cmd_model))
     app.add_handler(CommandHandler("clear", cmd_clear))
+    app.add_handler(CommandHandler("privacy", cmd_privacy))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CallbackQueryHandler(callback_mode, pattern="^mode_"))
     app.add_handler(CallbackQueryHandler(callback_model, pattern="^model_"))

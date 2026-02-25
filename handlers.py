@@ -11,7 +11,7 @@ from telegram.constants import ParseMode, ChatAction
 
 import nvidia_client as ai
 import session as sess
-from config import SELECTABLE_MODELS
+from config import SELECTABLE_MODELS, ALLOWED_USER_IDS, AUTO_DELETE_DOC_AFTER_ANSWER, DOC_TTL_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,24 @@ async def _keep_typing(bot, chat_id: int, stop_event: asyncio.Event):
         except Exception:
             pass
         await asyncio.sleep(4)
+
+
+def _is_allowed(user_id: int) -> bool:
+    """Return True if user is allowed. If allowlist is empty, everyone is allowed."""
+    if not ALLOWED_USER_IDS:
+        return True
+    return user_id in ALLOWED_USER_IDS
+
+
+async def _check_allowed(update: Update) -> bool:
+    """Check allowlist and send rejection if not allowed. Returns True if allowed."""
+    if not _is_allowed(update.effective_user.id):
+        await update.effective_message.reply_text(
+            "⛔ Sorry, you are not authorized to use this bot.\n"
+            "Contact the bot owner to request access."
+        )
+        return False
+    return True
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,6 +77,7 @@ async def _send_long(update: Update, text: str):
 # ---------------------------------------------------------------------------
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _check_allowed(update): return
     user = update.effective_user
     sess.clear_session(user.id)
     await update.message.reply_text(
@@ -75,6 +94,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _check_allowed(update): return
     current = sess.get_mode(update.effective_user.id)
     await update.message.reply_text(
         f"Current mode: *{_mode_label(current)}*\n\nSwitch to:",
@@ -84,22 +104,62 @@ async def cmd_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _check_allowed(update): return
     user_id = update.effective_user.id
-    mode = sess.get_mode(user_id)
-    sess.set_mode(user_id, mode)  # keeps mode, clears history & doc
+    sess.clear_session(user_id)
     await update.message.reply_text(
-        "🗑️ Conversation history cleared. Ready for a fresh start!"
+        "🗑️ All data cleared — conversation history, documents, and session reset!"
+    )
+
+
+async def cmd_privacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _check_allowed(update): return
+    user_id = update.effective_user.id
+    info = sess.get_privacy_info(user_id)
+
+    ttl_mins = DOC_TTL_SECONDS // 60
+    doc_status = "None"
+    if info["has_doc"]:
+        expires_mins = (info["doc_expires_in"] or 0) // 60
+        doc_status = f"✅ *{info['doc_name']}* (expires in ~{expires_mins} min)"
+
+    history_note = (
+        f"{info['history_count']} messages in memory"
+        if info["history_count"] > 0
+        else "No messages stored"
+    )
+
+    await update.message.reply_text(
+        "🔒 *Your Privacy & Data Summary*\n\n"
+        f"*Current mode:* {sess.MODES.get(info['mode'], info['mode'])}\n"
+        f"*AI model:* `{info['model']}`\n"
+        f"*Conversation:* {history_note}\n"
+        f"*Document:* {doc_status}\n\n"
+        "📋 *What we store (in RAM only):*\n"
+        "• Your conversation history (last 20 messages)\n"
+        "• Uploaded document text (auto-deleted after "
+        f"{ttl_mins} min)\n"
+        "• Your selected mode & model\n\n"
+        "📋 *What we DON'T store:*\n"
+        "• Files on disk (everything is in RAM)\n"
+        "• Your Telegram messages permanently\n"
+        "• Any data after bot restarts\n\n"
+        "⚠️ *Note:* Document text is sent to NVIDIA's API for processing.\n\n"
+        "🗑️ Use /clear to delete all your data immediately.",
+        parse_mode=ParseMode.MARKDOWN,
     )
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _check_allowed(update): return
     await update.message.reply_text(
         "🤖 *NVIDIA AI Telegram Bot — Help*\n\n"
         "*Commands:*\n"
         "/start — Welcome message & mode picker\n"
         "/mode — Switch between assistant modes\n"
         "/model — Switch the AI model\n"
-        "/clear — Clear conversation history\n"
+        "/clear — Clear all your data\n"
+        "/privacy — View & manage your stored data\n"
         "/help — Show this help message\n\n"
         "*Modes:*\n"
         "💬 *Chat* — Ask anything, have a conversation\n"
@@ -195,6 +255,7 @@ async def callback_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------------------------------------------------------------------
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _check_allowed(update): return
     user_id = update.effective_user.id
     mode = sess.get_mode(user_id)
     user_text = update.message.text.strip()
@@ -235,6 +296,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await thinking_msg.edit_text(reply, parse_mode=ParseMode.MARKDOWN)
                 return
             reply = ai.document_qa(doc_text, history, model=model)
+            if AUTO_DELETE_DOC_AFTER_ANSWER:
+                sess.clear_doc(user_id)
 
         elif mode == "image":
             stop_typing.set()
@@ -277,6 +340,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------------------------------------------------------------------
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _check_allowed(update): return
     user_id = update.effective_user.id
     mode = sess.get_mode(user_id)
 
@@ -334,6 +398,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------------------------------------------------------------------
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _check_allowed(update): return
     user_id = update.effective_user.id
     mode = sess.get_mode(user_id)
 
@@ -378,7 +443,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"⚠️ Document is large — I'll use the first {MAX_DOC_CHARS:,} characters."
             )
 
-        sess.set_doc_text(user_id, text)
+        sess.set_doc_text(user_id, text, filename=file_name)
         word_count = len(text.split())
         await thinking_msg.edit_text(
             f"✅ *{file_name}* loaded successfully!\n"
