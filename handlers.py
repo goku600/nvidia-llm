@@ -3,7 +3,6 @@ Telegram message/command handlers.
 """
 import io
 import asyncio
-import base64
 import logging
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -302,12 +301,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         file = await context.bot.get_file(photo.file_id)
-        file_bytes = await file.download_as_bytearray()
-        image_b64 = base64.b64encode(bytes(file_bytes)).decode()
+        file_bytes = bytes(await file.download_as_bytearray())
         mime_type = "image/jpeg"  # Telegram photos are always JPEG
 
         history = sess.get_history(user_id)
-        reply = ai.image_analysis(image_b64, mime_type, caption, history)
+        reply = ai.image_analysis(file_bytes, mime_type, caption, history)
 
         # Log image interaction in history as text
         user_entry = f"[User sent an image{': ' + caption if caption else ''}]"
