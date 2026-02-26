@@ -160,6 +160,21 @@ def _is_create_file_request(text: str) -> tuple[bool, str]:
     return False, ""
 
 
+def _is_image_followup(text: str) -> bool:
+    """Detect if the user wants to refer to the recently uploaded image."""
+    followup_keywords = [
+        "image", "photo", "picture", "pic", "it", "this", "translate", "read",
+        "extract", "what does", "can you see", "in there", "on there",
+        "that", "the man", "the cat", "the dog", "the document", "the written",
+        "saying", "text"
+    ]
+    text_lower = text.lower()
+    # It's highly likely to be a follow up if it's very short, or contains these words
+    if len(text_lower.split()) < 4 or any(kw in text_lower for kw in followup_keywords):
+        return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -333,8 +348,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             full_reply = ""
             last_edit_time = 0
             
-            # Route to vision model if image exists in context, otherwise standard chat
-            if image_bytes:
+            # Route to vision model if image exists in context AND user's text seems related
+            # Otherwise use standard text model
+            if image_bytes and _is_image_followup(user_text):
                 # remove the last user message from history, as it's passed as prompt
                 chat_history = history[:-1]
                 reply_generator = ai.image_analysis(image_bytes, image_mime or "image/jpeg", user_text, chat_history)
