@@ -456,22 +456,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         history = sess.get_history(user_id)
         
-        # Build the multimodal content payload
-        multimodal_content = [
-            {"type": "text", "text": caption},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}}
-        ]
-        
         # We don't save the massive base64 string to the session history to save RAM.
         # We just log that an image was sent for context.
         sess.add_message(user_id, "user", f"[User sent an image: {caption}]")
         
-        # Create a temporary history just for this API call containing the actual image
-        temp_history = history.copy()
-        temp_history.append({"role": "user", "content": multimodal_content})
-
-        # Process via the unified chat function, forcing the vision model
-        reply_generator = ai.chat(temp_history, model=VISION_MODEL)
+        # Process via the dedicated image_analysis function to avoid system prompt overriding the vision constraints
+        reply_generator = ai.image_analysis(file_bytes, "image/jpeg", caption, history)
         
         reply = ""
         async for chunk in reply_generator:
