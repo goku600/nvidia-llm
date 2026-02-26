@@ -108,7 +108,7 @@ async def chat(history: list[dict], model: str = CHAT_MODEL) -> AsyncGenerator[s
         "or facts you are unsure about, you MUST search the web.\n"
         "CRITICALLY: If you are asked to write a Python script using a library (like reportlab, python-docx, etc.) and you "
         "are NOT 100% sure about the exact function names or classes, you MUST search the web for the official documentation "
-        "or examples BEFORE writing the `[PYTHON_EXEC]` block to avoid hallucinated imports. Furthermore, if you need to download an image or file via Python, you MUST search the web to find a direct, valid URL first to avoid hallucinating fake links.\n"
+        "or examples BEFORE writing the `[PYTHON_EXEC]` block to avoid hallucinated imports. Furthermore, if you need to download an image or file via Python, you MUST search the web to find a direct, valid URL first (e.g. ending in .jpg or .png) to avoid hallucinating fake links or using unreliable redirect APIs like source.unsplash.com.\n"
         "To perform a search, output exactly this block and STOP generating:\n"
         "[WEB_SEARCH] your search query here [/WEB_SEARCH]\n\n"
         "The system will execute the query and provide you with snippets from DuckDuckGo. You will then automatically "
