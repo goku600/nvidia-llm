@@ -54,6 +54,9 @@ def set_doc_text(user_id: int, text: str, filename: str = "document",
     _sessions[user_id]["doc_bytes"] = file_bytes   # original raw bytes
     _sessions[user_id]["doc_mime"] = mime
     _sessions[user_id]["doc_uploaded_at"] = time.time()
+    # Ensure any stale image bytes are cleared to prevent conflicting context
+    _sessions[user_id]["image_bytes"] = None
+    _sessions[user_id]["image_mime"] = None
     # We DO NOT clear history here anymore! Gemini parity keeps context.
 
 
@@ -83,11 +86,19 @@ def clear_doc(user_id: int):
     _sessions[user_id]["doc_bytes"] = None
     _sessions[user_id]["doc_mime"] = None
     _sessions[user_id]["doc_uploaded_at"] = None
+    _sessions[user_id]["image_bytes"] = None
+    _sessions[user_id]["image_mime"] = None
 
 
 def set_image_file(user_id: int, file_bytes: bytes, mime: str = "image/jpeg"):
     _sessions[user_id]["image_bytes"] = file_bytes
     _sessions[user_id]["image_mime"] = mime
+    # Ensure any stale doc bytes are cleared to prevent conflicting context
+    _sessions[user_id]["doc_text"] = None
+    _sessions[user_id]["doc_name"] = None
+    _sessions[user_id]["doc_bytes"] = None
+    _sessions[user_id]["doc_mime"] = None
+    _sessions[user_id]["doc_uploaded_at"] = None
 
 
 def get_image_file(user_id: int) -> tuple[bytes | None, str | None]:
@@ -131,6 +142,8 @@ def clear_session(user_id: int):
         "doc_bytes": None,
         "doc_mime": None,
         "doc_uploaded_at": None,
+        "image_bytes": None,
+        "image_mime": None,
         "model": CHAT_MODEL,
         "started_at": time.time(),
     }
