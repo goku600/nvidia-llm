@@ -89,7 +89,7 @@ async def chat(history: list[dict], model: str = CHAT_MODEL) -> AsyncGenerator[s
         "1. Start the block with exactly `[PYTHON_EXEC]` on its own line.\n"
         "2. End the block with exactly `[/PYTHON_EXEC]` on its own line.\n"
         "3. Allowed libraries: io, json, csv, re, math, datetime, collections, openpyxl, pypdf, docx, PIL, reportlab.\n"
-        "4. **No other imports** or network/disk access is allowed.\n"
+        "4. **No other imports** or network/disk access is allowed. Specifically, DO NOT import 'Link' from reportlab.platypus.\n"
         "5. If a user previously uploaded a document, its raw bytes are available in the variable `input_bytes` (type: bytes).\n"
         "6. Write your output to the pre-existing variable `output_buffer` (type: io.BytesIO).\n"
         "7. Set the pre-existing variable `output_filename` (type: str) to the desired filename.\n\n"
