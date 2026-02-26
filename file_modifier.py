@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Allowed modules inside sandboxed execution
 SAFE_MODULES = {
     "io", "json", "csv", "re", "math", "datetime", "collections",
-    "openpyxl", "pypdf", "docx", "PIL", "reportlab",
+    "openpyxl", "pypdf", "docx", "PIL", "reportlab", "requests", "urllib",
 }
 
 EXECUTION_TIMEOUT = 30  # seconds
@@ -43,7 +43,8 @@ Your task: Write a complete Python script that:
 
 Rules:
 - Use only these libraries: io, json, csv, re, math, datetime, collections, openpyxl, pypdf, docx, PIL, reportlab
-- Do NOT use open(), os, sys, subprocess, requests, urllib, http, or any network/file system calls. If the user asks for data/images from the internet, you MUST generate dummy text or a solid color placeholder image locally.
+- Do NOT use open(), os, sys, subprocess, or any local file system calls.
+- You MAY use `requests` or `urllib` to download files/images from the internet if the user asks for it. Write the downloaded bytes directly to `output_buffer` (e.g. `output_buffer.write(requests.get(url).content)`).
 - Read from `input_bytes` (bytes), write to `output_buffer` (BytesIO)
 - For Excel: use openpyxl
 - For Word: use python-docx (import docx)
