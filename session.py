@@ -23,6 +23,10 @@ _sessions: dict[int, dict] = defaultdict(lambda: {
     "doc_text": None,
     "doc_name": None,
     "doc_uploaded_at": None,
+    "doc_bytes": None,
+    "doc_mime": None,
+    "image_bytes": None,
+    "image_mime": None,
     "model": CHAT_MODEL,
     "started_at": time.time(),
 })
@@ -79,6 +83,16 @@ def clear_doc(user_id: int):
     _sessions[user_id]["doc_bytes"] = None
     _sessions[user_id]["doc_mime"] = None
     _sessions[user_id]["doc_uploaded_at"] = None
+
+
+def set_image_file(user_id: int, file_bytes: bytes, mime: str = "image/jpeg"):
+    _sessions[user_id]["image_bytes"] = file_bytes
+    _sessions[user_id]["image_mime"] = mime
+
+
+def get_image_file(user_id: int) -> tuple[bytes | None, str | None]:
+    s = _sessions[user_id]
+    return s.get("image_bytes"), s.get("image_mime")
 
 
 def get_model(user_id: int) -> str:

@@ -321,6 +321,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     history = sess.get_history(user_id)
     model = sess.get_model(user_id)
     
+    # Check if there is an active image in the session for vision follow-ups
+    image_bytes, image_mime = sess.get_image_file(user_id)
+    
     try:
         # Consume the streaming generator inside a loop to support tool use (like Web Search)
         output_file = None
@@ -330,7 +333,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             full_reply = ""
             last_edit_time = 0
             
-            async for chunk in ai.chat(history, model=model):
+            # Route to vision model if image exists in context, otherwise standard chat
+            if image_bytes:
+                # remove the last user message from history, as it's passed as prompt
+                chat_history = history[:-1]
+                reply_generator = ai.image_analysis(image_bytes, image_mime or "image/jpeg", user_text, chat_history)
+            else:
+                reply_generator = ai.chat(history, model=model)
+            
+            async for chunk in reply_generator:
                 full_reply += chunk
                 
                 # Update Telegram message every 1.5 seconds to avoid rate limits
@@ -455,6 +466,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         image_b64 = base64.b64encode(file_bytes).decode('utf-8')
 
         history = sess.get_history(user_id)
+        
+        # Save the image bytes to session so subsequent text messages can still "see" it
+        sess.set_image_file(user_id, file_bytes, "image/jpeg")
         
         # We don't save the massive base64 string to the session history to save RAM.
         # We just log that an image was sent for context.
