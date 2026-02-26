@@ -43,7 +43,7 @@ Your task: Write a complete Python script that:
 
 Rules:
 - Use only these libraries: io, json, csv, re, math, datetime, collections, openpyxl, pypdf, docx, PIL, reportlab
-- Do NOT use open(), os, sys, subprocess, requests, or any network/file system calls
+- Do NOT use open(), os, sys, subprocess, requests, urllib, http, or any network/file system calls. If the user asks for data/images from the internet, you MUST generate dummy text or a solid color placeholder image locally.
 - Read from `input_bytes` (bytes), write to `output_buffer` (BytesIO)
 - For Excel: use openpyxl
 - For Word: use python-docx (import docx)
