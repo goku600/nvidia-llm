@@ -44,12 +44,12 @@ Your task: Write a complete Python script that:
 Rules:
 - Use only these libraries: io, json, csv, re, math, datetime, collections, openpyxl, pypdf, docx, PIL, reportlab
 - Do NOT use open(), os, sys, subprocess, or any local file system calls.
-- You MAY use `requests` or `urllib` to download files/images from the internet if the user asks for it. Write the downloaded bytes directly to `output_buffer` (e.g. `output_buffer.write(requests.get(url).content)`).
+- You MAY use `requests` or `urllib` to download files/images. ALWAYS use a User-Agent and check for HTTP errors (e.g. `r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}); r.raise_for_status()`) before writing `r.content` to `output_buffer`.
 - Read from `input_bytes` (bytes), write to `output_buffer` (BytesIO)
 - For Excel: use openpyxl
 - For Word: use python-docx (import docx)
 - For PDF creation/conversion: use reportlab (e.g., from reportlab.pdfgen import canvas; c = canvas.Canvas(output_buffer); c.drawString(100, 750, "Content"); c.save()). DO NOT import 'Link' from reportlab.platypus and DO NOT import 'getNormalStyle' from reportlab.lib.styles.
-- For Images: use PIL (Pillow). Save directly to the buffer: `image.save(output_buffer, format='PNG')`. DO NOT use `open()` from the os. If loading an image from the web, wrap it in BytesIO: `Image.open(io.BytesIO(requests.get(url).content))`.
+- For Images: use PIL (Pillow). Save directly to the buffer: `image.save(output_buffer, format='PNG')`. DO NOT use `open()` from the os. If loading an image from the web, ensure it is successful and wrap it in BytesIO: `Image.open(io.BytesIO(r.content))`.
 - For CSV/TXT/JSON/MD/PY: use string manipulation and write encoded text to output_buffer
 - Set output_filename to a descriptive name like "modified_report.xlsx"
 - The script must be complete and runnable
