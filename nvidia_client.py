@@ -91,7 +91,7 @@ async def chat(history: list[dict], model: str = CHAT_MODEL) -> AsyncGenerator[s
         "3. Allowed libraries: io, json, csv, re, math, datetime, collections, openpyxl, pypdf, docx, PIL, reportlab, requests, urllib.\n"
         "4. **No other imports** or local disk access is allowed. You MAY use 'requests' or 'urllib' to download internet data or images if requested. Write downloaded content directly to `output_buffer`. DO NOT import 'Link' from reportlab.platypus and DO NOT import 'getNormalStyle' from reportlab.lib.styles.\n"
         "5. If a user previously uploaded a document, its raw bytes are available in the variable `input_bytes` (type: bytes).\n"
-        "6. Write your output to the pre-existing variable `output_buffer` (type: io.BytesIO). DO NOT use `open()` to save files, as it is strictly blocked.\n"
+        "6. Write your output to the pre-existing variable `output_buffer` (type: io.BytesIO). DO NOT use `open()` to save files, as it is strictly blocked. If loading an internet image into PIL, you MUST wrap the bytes: `Image.open(io.BytesIO(requests.get(url).content))`.\n"
         "7. Set the pre-existing variable `output_filename` (type: str) to the desired filename.\n\n"
         "EXAMPLE (User: 'Create a PDF with Hello World'):\n"
         "Sure, I'll generate that PDF for you right now.\n"
