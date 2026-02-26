@@ -48,6 +48,7 @@ Rules:
 - For Excel: use openpyxl
 - For Word: use python-docx (import docx)
 - For PDF creation/conversion: use reportlab (e.g., from reportlab.pdfgen import canvas; c = canvas.Canvas(output_buffer); c.drawString(100, 750, "Content"); c.save()). DO NOT import 'Link' from reportlab.platypus and DO NOT import 'getNormalStyle' from reportlab.lib.styles.
+- For Images: use PIL (Pillow). Save directly to the buffer: image.save(output_buffer, format='PNG'). DO NOT use open().
 - For CSV/TXT/JSON/MD/PY: use string manipulation and write encoded text to output_buffer
 - Set output_filename to a descriptive name like "modified_report.xlsx"
 - The script must be complete and runnable
