@@ -471,7 +471,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         temp_history.append({"role": "user", "content": multimodal_content})
 
         # Process via the unified chat function, forcing the vision model
-        reply = ai.chat(temp_history, model=VISION_MODEL)
+        reply_generator = ai.chat(temp_history, model=VISION_MODEL)
+        
+        reply = ""
+        async for chunk in reply_generator:
+            reply += chunk
+            # Optional: Add streaming UI update here if needed
+            # await thinking_msg.edit_text(reply + " ⏳")
 
         sess.add_message(user_id, "assistant", reply)
         await _edit_or_send(thinking_msg, update, reply)
