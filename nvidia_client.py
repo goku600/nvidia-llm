@@ -57,8 +57,9 @@ def _base_payload(model: str, messages: list, thinking: bool = False) -> dict:
         "temperature": TEMPERATURE,
         "top_p": TOP_P,
         "top_k": TOP_K,
-        "presence_penalty": 0,
-        "repetition_penalty": 1,
+        "top_k": TOP_K,
+        "presence_penalty": 0.2,
+        "repetition_penalty": 1.1,
         "stream": True,
     }
     if thinking:
