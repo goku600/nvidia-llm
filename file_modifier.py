@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 SAFE_MODULES = {
     "io", "json", "csv", "re", "math", "datetime", "collections",
     "openpyxl", "pypdf", "docx", "PIL", "reportlab", "requests", "urllib", "gspread",
+    "google", "google_auth_oauthlib", "googleapiclient", "oauth2client", "httplib2", 
+    "urllib3", "certifi", "idna", "charset_normalizer", "rsa", "pyasn1", "pyasn1_modules", "cachetools"
 }
 
 EXECUTION_TIMEOUT = 30  # seconds
@@ -76,16 +78,20 @@ def _safe_exec(code: str, input_bytes: bytes) -> tuple[bytes | None, str | None,
     output_filename = "modified_file"
     result = {"bytes": None, "filename": None, "error": None}
 
-    # Restricted builtins — block dangerous functions
+    # Restricted builtins — block dangerous functions while allowing classes/types
+    dangerous_builtins = {
+        "open", "exec", "eval", "compile", "breakpoint", "input"
+    }
+    
+    # We must allow `__import__` (which we override) and standard core types/exceptions
+    # otherwise deep libraries like requests and google-auth fail on instantiation.
     safe_builtins = {
         k: v for k, v in __builtins__.items()
-        if k not in ("open", "exec", "eval", "compile", "__import__",
-                     "breakpoint", "input", "print")
+        if k not in dangerous_builtins
     } if isinstance(__builtins__, dict) else {
         k: getattr(__builtins__, k)
         for k in dir(__builtins__)
-        if k not in ("open", "exec", "eval", "compile", "__import__",
-                     "breakpoint", "input", "print")
+        if k not in dangerous_builtins
     }
 
     _real_import = __import__
@@ -95,7 +101,12 @@ def _safe_exec(code: str, input_bytes: bytes) -> tuple[bytes | None, str | None,
         base = name.split(".")[0]
         if base not in SAFE_MODULES:
             raise ImportError(f"Import of '{name}' is not allowed in sandbox.")
-        return _real_import(name, globals, locals, fromlist, level)
+        try:
+            return _real_import(name, globals, locals, fromlist, level)
+        except ImportError as e:
+            # If a deep import fails, sometimes it's because of strict __import__ sandboxing.
+            # We let it bubble up, but log it so we know which dependency failed.
+            raise ImportError(f"Sandbox allowed '{base}' but failed to load '{name}': {e}")
 
     safe_builtins["__import__"] = safe_import
     safe_builtins["print"] = lambda *a, **k: None  # silence prints
