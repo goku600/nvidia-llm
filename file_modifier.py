@@ -183,7 +183,9 @@ def _safe_exec(code: str, input_bytes: bytes) -> tuple[bytes | None, str | None,
 
     output_bytes = result["bytes"]
     if not output_bytes:
-        return None, None, "Code ran but produced no output. Make sure you write to `output_buffer`."
+        # Instead of throwing an error, we treat empty output_bytes as a successful "silent" execution
+        # (e.g. updating a remote database without saving a local file).
+        return None, None, None
 
     return output_bytes, result["filename"], None
 
