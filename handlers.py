@@ -425,7 +425,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Normal terminal reply
                 final_reply = full_reply
             
-            # If we get here (no further tools required), we break the loop
+            # If we get here (we didn't trigger a web search 'continue'), we must break the loop
             break
 
     except Exception as e:

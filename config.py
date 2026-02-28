@@ -10,7 +10,7 @@ NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 
 # Models
 CHAT_MODEL = "meta/llama-3.3-70b-instruct"
-VISION_MODEL = "meta/llama-3.2-11b-vision-instruct"  # confirmed working vision model
+VISION_MODEL = "meta/llama-3.2-90b-vision-instruct"  # Upgraded vision model
 CODE_MODEL = "qwen/qwen3-coder-480b-a35b-instruct"
 DOC_MODEL = "meta/llama-3.3-70b-instruct"
 
