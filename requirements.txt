@@ -10,3 +10,4 @@ ddgs
 gspread==6.1.2
 pandas==2.2.0
 numpy==1.26.4
+beautifulsoup4==4.12.3

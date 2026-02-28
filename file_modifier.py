@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Allowed modules inside sandboxed execution
 SAFE_MODULES = {
     "io", "json", "csv", "re", "math", "datetime", "collections", "pandas", "numpy",
-    "openpyxl", "pypdf", "docx", "PIL", "reportlab", "requests", "urllib", "gspread",
+    "openpyxl", "pypdf", "docx", "PIL", "reportlab", "requests", "urllib", "gspread", "bs4",
     "google", "google_auth_oauthlib", "googleapiclient", "oauth2client", "httplib2", 
     "urllib3", "certifi", "idna", "charset_normalizer", "rsa", "pyasn1", "pyasn1_modules", "cachetools"
 }
