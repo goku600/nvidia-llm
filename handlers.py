@@ -343,10 +343,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Consume the streaming generator inside a loop to support tool use (like Web Search)
         output_file = None
         final_reply = ""
+        last_edit_time = 0
         
         while True:
             full_reply = ""
-            last_edit_time = 0
             
             # Route to vision model if image exists in context AND user's text seems related
             # Otherwise use standard text model
