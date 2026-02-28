@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Allowed modules inside sandboxed execution
 SAFE_MODULES = {
     "io", "json", "csv", "re", "math", "datetime", "collections",
-    "openpyxl", "pypdf", "docx", "PIL", "reportlab", "requests", "urllib",
+    "openpyxl", "pypdf", "docx", "PIL", "reportlab", "requests", "urllib", "gspread",
 }
 
 EXECUTION_TIMEOUT = 30  # seconds
@@ -45,6 +45,7 @@ Rules:
 - Use only these libraries: io, json, csv, re, math, datetime, collections, openpyxl, pypdf, docx, PIL, reportlab
 - Do NOT use os, sys, subprocess, or any local file system calls. (You can use open() to read the input or save the output).
 - You MAY use `requests` or `urllib` to download files/images. ALWAYS use a User-Agent and check for HTTP errors (e.g. `r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}); r.raise_for_status()`).
+- Google Sheets: You have access to a pre-authenticated `gspread` client globally named `gspread_client`. To read/write a sheet, simply do: `sheet = gspread_client.open("Sheet Name").sheet1`. Do NOT attempt to authenticate it yourself. (If you only modify a cloud sheet and don't need a file returned, write success text to a .txt file).
 - Read from `input_bytes` (bytes) or `open('input.txt', 'r')`, write to `output_buffer` (BytesIO) or `open('output_filename.ext', 'wb')`.
 - For Excel: use openpyxl (import openpyxl). Save directly to the buffer: `wb.save(output_buffer)`
 - For Word: use python-docx (import docx). Save directly to the buffer: `doc.save(output_buffer)`. DO NOT save to a string filename. To convert PDF to Word, decode `input_bytes` (e.g., `text = input_bytes.decode('utf-8', errors='ignore')`), create a new `docx.Document()`, add text as paragraphs, and save it to `output_buffer`.
@@ -105,6 +106,21 @@ def _safe_exec(code: str, input_bytes: bytes) -> tuple[bytes | None, str | None,
         "output_filename": output_filename,
         "io": io,
     }
+    
+    # Securely inject Google Sheets authenticated client if available
+    gspread_client = None
+    try:
+        import os
+        import gspread
+        creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+        if creds_json:
+            creds_dict = json.loads(creds_json)
+            gspread_client = gspread.service_account_from_dict(creds_dict)
+    except Exception as e:
+        logger.warning(f"Failed to initialize gspread client: {e}")
+    if gspread_client:
+        local_vars["gspread_client"] = gspread_client
+        local_vars["gspread"] = __import__("gspread")
 
     class SandboxedFile:
         def __init__(self, name, mode):
