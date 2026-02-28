@@ -47,7 +47,7 @@ Rules:
 - You MAY use `requests` or `urllib` to download files/images. ALWAYS use a User-Agent and check for HTTP errors (e.g. `r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}); r.raise_for_status()`).
 - Read from `input_bytes` (bytes) or `open('input.txt', 'r')`, write to `output_buffer` (BytesIO) or `open('output_filename.ext', 'wb')`.
 - For Excel: use openpyxl (import openpyxl). Save directly to the buffer: `wb.save(output_buffer)`
-- For Word: use python-docx (import docx). Save directly to the buffer: `doc.save(output_buffer)`. DO NOT save to a string filename.
+- For Word: use python-docx (import docx). Save directly to the buffer: `doc.save(output_buffer)`. DO NOT save to a string filename. To convert PDF to Word, decode `input_bytes` (e.g., `text = input_bytes.decode('utf-8', errors='ignore')`), create a new `docx.Document()`, add text as paragraphs, and save it to `output_buffer`.
 - For PDF creation/conversion: use reportlab (e.g., from reportlab.pdfgen import canvas; c = canvas.Canvas(output_buffer); c.drawString(100, 750, "Content"); c.save()). DO NOT import 'Link' from reportlab.platypus and DO NOT import 'getNormalStyle' from reportlab.lib.styles.
 - For Images: use PIL (Pillow). Save directly to the buffer: `image.save(output_buffer, format='PNG')`. If loading an image from the web, wrap it in BytesIO: `Image.open(io.BytesIO(r.content))`.
 - For CSV/TXT/JSON/MD/PY: use string manipulation and write encoded text to output_buffer
