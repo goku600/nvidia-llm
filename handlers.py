@@ -56,7 +56,7 @@ async def _edit_or_send(thinking_msg: Message, update: Update, text: str):
     """
     if not text or not text.strip():
         # Fallback if the AI returns literally nothing
-        text = "_(No spoken response)_"
+        text = "(No spoken response)"
         
     try:
         if len(text) <= MAX_MSG:
@@ -169,8 +169,8 @@ def _is_image_followup(text: str) -> bool:
         "saying", "text"
     ]
     text_lower = text.lower()
-    # It's highly likely to be a follow up if it's very short, or contains these words
-    if len(text_lower.split()) < 4 or any(kw in text_lower for kw in followup_keywords):
+    # It's likely to be a follow up if it contains these specific words
+    if any(kw in text_lower for kw in followup_keywords):
         return True
     return False
 
