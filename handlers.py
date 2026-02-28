@@ -223,6 +223,7 @@ async def cmd_privacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "🔒 *Your Privacy & Data Summary*\n\n"
+        f"*Your Telegram ID:* `{user_id}`\n"
         f"*AI model:* `{info['model']}`\n"
         f"*Conversation:* {history_note}\n"
         f"*Document info context:* {doc_status}\n\n"
