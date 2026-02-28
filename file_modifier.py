@@ -43,13 +43,13 @@ Your task: Write a complete Python script that:
 
 Rules:
 - Use only these libraries: io, json, csv, re, math, datetime, collections, openpyxl, pypdf, docx, PIL, reportlab
-- Do NOT use open(), os, sys, subprocess, or any local file system calls.
-- You MAY use `requests` or `urllib` to download files/images. ALWAYS use a User-Agent and check for HTTP errors (e.g. `r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}); r.raise_for_status()`) before writing `r.content` to `output_buffer`.
-- Read from `input_bytes` (bytes), write to `output_buffer` (BytesIO)
-- For Excel: use openpyxl
-- For Word: use python-docx (import docx)
+- Do NOT use os, sys, subprocess, or any local file system calls. (You can use open() to read the input or save the output).
+- You MAY use `requests` or `urllib` to download files/images. ALWAYS use a User-Agent and check for HTTP errors (e.g. `r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}); r.raise_for_status()`).
+- Read from `input_bytes` (bytes) or `open('input.txt', 'r')`, write to `output_buffer` (BytesIO) or `open('output_filename.ext', 'wb')`.
+- For Excel: use openpyxl (import openpyxl). Save directly to the buffer: `wb.save(output_buffer)`
+- For Word: use python-docx (import docx). Save directly to the buffer: `doc.save(output_buffer)`. DO NOT save to a string filename.
 - For PDF creation/conversion: use reportlab (e.g., from reportlab.pdfgen import canvas; c = canvas.Canvas(output_buffer); c.drawString(100, 750, "Content"); c.save()). DO NOT import 'Link' from reportlab.platypus and DO NOT import 'getNormalStyle' from reportlab.lib.styles.
-- For Images: use PIL (Pillow). Save directly to the buffer: `image.save(output_buffer, format='PNG')`. DO NOT use `open()` from the os. If loading an image from the web, ensure it is successful and wrap it in BytesIO: `Image.open(io.BytesIO(r.content))`.
+- For Images: use PIL (Pillow). Save directly to the buffer: `image.save(output_buffer, format='PNG')`. If loading an image from the web, wrap it in BytesIO: `Image.open(io.BytesIO(r.content))`.
 - For CSV/TXT/JSON/MD/PY: use string manipulation and write encoded text to output_buffer
 - Set output_filename to a descriptive name like "modified_report.xlsx"
 - The script must be complete and runnable
@@ -105,6 +105,45 @@ def _safe_exec(code: str, input_bytes: bytes) -> tuple[bytes | None, str | None,
         "output_filename": output_filename,
         "io": io,
     }
+
+    class SandboxedFile:
+        def __init__(self, name, mode):
+            import os
+            self.name = os.path.basename(str(name))
+            self.mode = mode
+            if 'r' in mode:
+                if 'b' in mode:
+                    self.buf = io.BytesIO(input_bytes)
+                else:
+                    try:
+                        text = input_bytes.decode('utf-8')
+                    except UnicodeDecodeError:
+                        text = input_bytes.decode('latin-1')
+                    self.buf = io.StringIO(text)
+            else:
+                if 'b' in mode:
+                    self.buf = io.BytesIO()
+                else:
+                    self.buf = io.StringIO()
+
+        def write(self, data): return self.buf.write(data)
+        def read(self, *args, **kwargs): return self.buf.read(*args, **kwargs)
+        def readlines(self): return self.buf.readlines()
+        def __iter__(self): return self.buf.__iter__()
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc_val, exc_tb): self.close()
+        def close(self):
+            if 'w' in self.mode or 'a' in self.mode:
+                val = self.buf.getvalue()
+                if isinstance(val, str):
+                    val = val.encode('utf-8')
+                local_vars["output_buffer"].write(val)
+                local_vars["output_filename"] = self.name
+
+    def safe_open(file, mode='r', *args, **kwargs):
+        return SandboxedFile(file, mode)
+
+    safe_builtins["open"] = safe_open
 
     global_vars = {"__builtins__": safe_builtins}
 
