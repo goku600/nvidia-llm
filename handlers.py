@@ -73,12 +73,25 @@ async def _edit_or_send(thinking_msg: Message, update: Update, text: str):
                 match = re.search(r'Retry in (\d+)', err_str)
                 if match:
                     wait_time = int(match.group(1)) + 1
-                await asyncio.sleep(wait_time)
-                try:
-                    await msg.edit_text(new_text)
-                    return True
-                except Exception:
-                    pass
+                
+                # If Telegram asks us to wait a long time, just send a new message instead of hanging the UI
+                if wait_time > 5:
+                    try:
+                        await update.effective_message.reply_text(new_text, parse_mode=parse_mode)
+                        return True
+                    except Exception:
+                        try:
+                            await update.effective_message.reply_text(new_text)
+                            return True
+                        except Exception:
+                            pass
+                else:
+                    await asyncio.sleep(wait_time)
+                    try:
+                        await msg.edit_text(new_text)
+                        return True
+                    except Exception:
+                        pass
             return False
         return True
 
