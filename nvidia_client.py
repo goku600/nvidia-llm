@@ -93,7 +93,7 @@ async def chat(history: list[dict], model: str = CHAT_MODEL) -> AsyncGenerator[s
         "or edit an existing one, you MUST output the exact Python code needed to do it inside "
         "a special `[PYTHON_EXEC]` block.\n\n"
         "RULES FOR `[PYTHON_EXEC]`:\n"
-        "1. Start the block with exactly `[PYTHON_EXEC]` on its own line.\n"
+        "1. Start the block with exactly `[PYTHON_EXEC]` on its own line. DO NOT WRAP IT IN MARKDOWN BACKTICKS (```). DO NOT PUT ```python BEFORE IT.\n"
         "2. End the block with exactly `[/PYTHON_EXEC]` on its own line.\n"
         "3. Allowed libraries: You can import any standard python library or common data science pip package (pandas, numpy, reportlab, docx, openpyxl, bs4, etc). Strict OS/subprocess libraries are blocked.\n"
         "4. **No other imports** or local disk access is allowed. You MAY use 'requests' or 'urllib' to download internet data or images if requested. ALWAYS use a User-Agent and check `raise_for_status()` to avoid downloading error pages. Write successful downloaded content directly to `output_buffer`. DO NOT hallucinate URLs. You MUST use the `[WEB_SEARCH]` tool first to find a real, valid URL to the requested image or data before writing code. You MUST explicitly import PDF classes like `Paragraph` from `reportlab.platypus`. DO NOT import 'Link' from reportlab.platypus. DO NOT try to fix execution errors by assigning to `result[\"bytes\"]`. Just write to or assign to `output_buffer`.\n"

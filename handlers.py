@@ -398,19 +398,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 did_search = True
 
             # 2. Check for File Execution Tool
-            exec_start = full_reply.find("[PYTHON_EXEC]")
-            exec_end = full_reply.find("[/PYTHON_EXEC]")
+            import re
+            
+            # Clean up hallucinated markdown fences before processing
+            clean_reply_for_parsing = full_reply
+            if "```python\n[PYTHON_EXEC]" in clean_reply_for_parsing:
+                clean_reply_for_parsing = clean_reply_for_parsing.replace("```python\n[PYTHON_EXEC]", "[PYTHON_EXEC]")
+            elif "```\n[PYTHON_EXEC]" in clean_reply_for_parsing:
+                clean_reply_for_parsing = clean_reply_for_parsing.replace("```\n[PYTHON_EXEC]", "[PYTHON_EXEC]")
+            
+            exec_start = clean_reply_for_parsing.find("[PYTHON_EXEC]")
+            exec_end = clean_reply_for_parsing.find("[/PYTHON_EXEC]")
             
             # If the AI ignored our instruction and outputted python code AFTER a web search,
             # we MUST ignore it, because it hasn't seen the search results yet!
             if exec_start != -1 and exec_end != -1 and exec_end > exec_start and not did_search:
                 await thinking_msg.edit_text("⚙️ Generating your file, please wait...")
-                code = full_reply[exec_start + len("[PYTHON_EXEC]"):exec_end].strip()
+                code = clean_reply_for_parsing[exec_start + len("[PYTHON_EXEC]"):exec_end].strip()
                 
-                # Strip hallucinated markdown fences
-                import re
-                if code.startswith("```"):
-                    code = re.sub(r"^```(python)?\s*", "", code, flags=re.IGNORECASE)
+                # Strip remaining trailing hallucinated markdown fences
                 if code.endswith("```"):
                     code = re.sub(r"\s*```$", "", code)
                 
@@ -423,7 +429,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 
                 # Clean the reply to remove the python block
-                clean_reply = full_reply[:exec_start].strip() + "\n" + full_reply[exec_end + len("[/PYTHON_EXEC]"):].strip()
+                clean_reply = clean_reply_for_parsing[:exec_start].strip() + "\n" + clean_reply_for_parsing[exec_end + len("[/PYTHON_EXEC]"):].strip()
                 final_reply = clean_reply.strip() or "✅ Task completed."
                 
                 if error:
@@ -435,7 +441,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     pass
             elif exec_start != -1 and exec_end == -1 and not did_search:
                 # The code block was never closed, likely because the LLM hit the token limit
-                final_reply = full_reply.strip() + "\n\n⚠️ **Warning:** The generated Python code was too long and got cut off by the AI token limit. Try asking the AI to keep the code shorter and not hardcode large amounts of text."
+                final_reply = clean_reply_for_parsing.strip() + "\n\n⚠️ **Warning:** The generated Python code was too long and got cut off by the AI token limit. Try asking the AI to keep the code shorter and not hardcode large amounts of text."
             else:
                 # Normal terminal reply (clean search block if any)
                 if did_search:
