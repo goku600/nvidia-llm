@@ -379,6 +379,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Consume the streaming generator inside a loop to support tool use (like Web Search)
         output_file = None
         final_reply = ""
+        history_reply = None
+        is_truncated = False
         last_edit_time = 0
         has_shown_generating = False
         
@@ -552,11 +554,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         typing_task.cancel()
 
     # Log assistant response to history
-    if "is_truncated" in locals() and is_truncated:
-        sess.add_message(user_id, "assistant", locals().get("history_reply", final_reply))
+    log_reply = history_reply if history_reply is not None else final_reply
+    if is_truncated:
+        sess.add_message(user_id, "assistant", log_reply)
         sess.add_message(user_id, "user", "[SYSTEM EXCEPTION]: The previous [PYTHON_EXEC] block was cut off by the token limit. Rewrite the entire script from the beginning to be much shorter. Use loops instead of hardcoding lots of data. Do not continue the old block.")
     else:
-        sess.add_message(user_id, "assistant", locals().get("history_reply", final_reply))
+        sess.add_message(user_id, "assistant", log_reply)
     await _edit_or_send(thinking_msg, update, final_reply)
     
     # If a file was generated, send it as a follow-up
