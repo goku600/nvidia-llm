@@ -485,7 +485,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 file_bytes, _, _ = sess.get_doc_file(user_id)
                 input_bytes = file_bytes if file_bytes else b""
                 
-                output_bytes, output_filename, error = await asyncio.to_thread(
+                output_bytes, output_filename, error, printed_text = await asyncio.to_thread(
                     file_modifier.execute_python_code, code, input_bytes
                 )
                 
@@ -501,7 +501,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 elif output_bytes:
                     output_file = (output_bytes, output_filename)
                     # DELETE the python code from history! Just tell the AI it was successful so it doesn't get stuck in a loop repeating it!
-                    history_reply = user_friendly_text + f"\n\n[System: At this point, you successfully executed a Python script that generated '{output_filename}'. The file was delivered to the user and is actively loaded in memory as `input_bytes`. Do NOT generate the script again unless asked.]"
+                    sys_msg = f"\n\n[System: At this point, you successfully executed a Python script that generated '{output_filename}'. The file was delivered to the user and is actively loaded in memory as `input_bytes`. Do NOT generate the script again unless asked."
+                    if printed_text:
+                        sys_msg += f" Console printed:\n{printed_text}"
+                    sys_msg += "]"
+                    history_reply = user_friendly_text + sys_msg
                     
                     ext = output_filename.rsplit('.', 1)[-1].lower() if '.' in output_filename else 'bin'
                     mime_map = {'pdf': 'application/pdf', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'png': 'image/png', 'csv': 'text/csv', 'jpg': 'image/jpeg'}
@@ -515,8 +519,23 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         mime=mime
                     )
                 else:
-                    # Successful "silent" execution (e.g. wrote to a database without returning a file)
-                    history_reply += f"\n\n[SYSTEM NOTIFICATION: Code executed successfully without returning a file.]"
+                    # Successful "silent" execution (e.g. data extraction or printed calculations)
+                    sys_msg = f"\n\n[System: Code executed successfully."
+                    if printed_text:
+                        sys_msg += f" Console printed:\n{printed_text}"
+                    else:
+                        sys_msg += " No file was returned and nothing was printed."
+                    sys_msg += "]"
+                    history_reply = user_friendly_text + sys_msg
+                    
+                    # Loop back so the AI can read the printed text and talk to the user!
+                    sess.add_message(user_id, "assistant", history_reply)
+                    history = sess.get_history(user_id)
+                    try:
+                        await thinking_msg.edit_text("⚙️ Reading results... ⏳")
+                    except Exception:
+                        pass
+                    continue
             elif exec_start != -1 and exec_end == -1 and not did_search:
                 # The code block was never closed, likely because the LLM hit the token limit
                 is_truncated = True
