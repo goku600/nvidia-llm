@@ -380,6 +380,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         output_file = None
         final_reply = ""
         last_edit_time = 0
+        has_shown_generating = False
         
         while True:
             full_reply = ""
@@ -405,18 +406,28 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     exec_marker_1 = "```python\n[PYTHON_EXEC]"
                     exec_marker_2 = "[PYTHON_EXEC]"
                     
+                    is_generating_file = False
                     if exec_marker_1 in display_text:
                         idx = display_text.find(exec_marker_1)
                         display_text = display_text[:idx].strip() + "\n\n⚙️ Generating file..."
+                        is_generating_file = True
                     elif exec_marker_2 in display_text:
                         idx = display_text.find(exec_marker_2)
                         display_text = display_text[:idx].strip() + "\n\n⚙️ Generating file..."
+                        is_generating_file = True
                     
+                    if is_generating_file and has_shown_generating:
+                        # Skip subsequent edits to avoid Telegram rate limits
+                        last_edit_time = current_time
+                        continue
+
                     # Truncate for streaming preview if it gets too long
                     preview_text = display_text if len(display_text) < MAX_MSG else display_text[:MAX_MSG] + "..."
                     try:
                         await thinking_msg.edit_text(preview_text + " ⏳")
                         last_edit_time = current_time
+                        if is_generating_file:
+                            has_shown_generating = True
                     except Exception:
                         pass
             # Initialize tools state
@@ -490,8 +501,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif exec_start != -1 and exec_end == -1 and not did_search:
                 # The code block was never closed, likely because the LLM hit the token limit
                 is_truncated = True
+                
+                # history_reply needs the python code so the AI knows where it left off,
+                # BUT the final_reply intended for the user should hide it!
                 history_reply = clean_reply_for_parsing.strip()
-                final_reply = history_reply + "\n\n⚠️ **Warning:** The generated Python code was too long and got cut off by the AI token limit. Do NOT type 'continue'. Tell the bot to use dynamic loops or make the script shorter."
+                user_friendly_text = clean_reply_for_parsing[:exec_start].strip()
+                final_reply = user_friendly_text + "\n\n⚠️ **Warning:** The generated Python code was too long and got cut off by the AI token limit. Do NOT type 'continue'. Tell the bot to use dynamic loops or make the script shorter."
             else:
                 # Normal terminal reply (clean search block if any)
                 if did_search:
