@@ -433,6 +433,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     # Successful "silent" execution (e.g. wrote to a database without returning a file)
                     pass
+            elif exec_start != -1 and exec_end == -1 and not did_search:
+                # The code block was never closed, likely because the LLM hit the token limit
+                final_reply = full_reply.strip() + "\n\n⚠️ **Warning:** The generated Python code was too long and got cut off by the AI token limit. Try asking the AI to keep the code shorter and not hardcode large amounts of text."
             else:
                 # Normal terminal reply (clean search block if any)
                 if did_search:
