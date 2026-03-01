@@ -490,14 +490,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Clean the reply to remove the python block
                 clean_reply = clean_reply_for_parsing[:exec_start].strip() + "\n" + clean_reply_for_parsing[exec_end + len("[/PYTHON_EXEC]"):].strip()
                 final_reply = clean_reply.strip() or "✅ Task completed."
+                history_reply = clean_reply_for_parsing.strip()
                 
                 if error:
                     final_reply += f"\n\n⚠️ **Execution Error:**\n```\n{error[:500]}\n```"
+                    history_reply += f"\n\n⚠️ **Execution Error:**\n```\n{error[:500]}\n```"
                 elif output_bytes:
                     output_file = (output_bytes, output_filename)
+                    history_reply += f"\n\n[SYSTEM NOTIFICATION: Code executed successfully and generated file {output_filename}. Note: The python block was hidden from the user UI, but the file was delivered.]"
                 else:
                     # Successful "silent" execution (e.g. wrote to a database without returning a file)
-                    pass
+                    history_reply += f"\n\n[SYSTEM NOTIFICATION: Code executed successfully without returning a file.]"
             elif exec_start != -1 and exec_end == -1 and not did_search:
                 # The code block was never closed, likely because the LLM hit the token limit
                 is_truncated = True
@@ -540,7 +543,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sess.add_message(user_id, "assistant", locals().get("history_reply", final_reply))
         sess.add_message(user_id, "user", "[SYSTEM EXCEPTION]: The previous [PYTHON_EXEC] block was cut off by the token limit. Rewrite the entire script from the beginning to be much shorter. Use loops instead of hardcoding lots of data. Do not continue the old block.")
     else:
-        sess.add_message(user_id, "assistant", final_reply)
+        sess.add_message(user_id, "assistant", locals().get("history_reply", final_reply))
     await _edit_or_send(thinking_msg, update, final_reply)
     
     # If a file was generated, send it as a follow-up
