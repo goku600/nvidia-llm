@@ -47,11 +47,11 @@ Rules:
 - Use only these libraries: io, json, csv, re, math, datetime, collections, openpyxl, pypdf, docx, PIL, reportlab
 - Do NOT use os, sys, subprocess, or any local file system calls. (You can use open() to read the input or save the output).
 - You MAY use `requests` or `urllib` to download files/images. ALWAYS use a User-Agent and check for HTTP errors (e.g. `r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}); r.raise_for_status()`).
-- Google Sheets: You have access to a pre-authenticated `gspread` client globally named `gspread_client`. To read/write a sheet, simply do: `sheet = gspread_client.open("Sheet Name").sheet1`. Do NOT attempt to authenticate it yourself. Use `sheet.append_row()` to add new data to the bottom. Use `sheet.update_cell(row, col, value)` or `sheet.update([range], [[values]])` ONLY if the user explicitly asks to modify/overwrite existing data. Use `sheet.delete_rows(row_index)` if asked to remove data. If reading data to show the user, pull records with `sheet.get_all_records()`, use `pandas.DataFrame(data)`, and save to `output_buffer` as a CSV.
+- Google Sheets: You ALREADY have a pre-authenticated `gspread_client` variable in scope. DO NOT use oauth2client, do NOT look for a client_secret.json, and do NOT attempt to authenticate. Just do: `sheet = gspread_client.open("Sheet Name").sheet1`. Use `sheet.append_row()` to add new data to the bottom. Use `sheet.update_cell(row, col, value)` or `sheet.update([range], [[values]])` ONLY if the user explicitly asks to modify/overwrite existing data. Use `sheet.delete_rows(row_index)` if asked to remove data. If reading data to show the user, pull records with `sheet.get_all_records()`, use `pandas.DataFrame(data)`, and save to `output_buffer` as a CSV.
 - Read from `input_bytes` (bytes) or `open('input.txt', 'r')`, write to `output_buffer` (BytesIO) or `open('output_filename.ext', 'wb')`.
 - For Excel: use openpyxl (import openpyxl). Save directly to the buffer: `wb.save(output_buffer)`
 - For Word: use python-docx (import docx). Save directly to the buffer: `doc.save(output_buffer)`. DO NOT save to a string filename. To convert PDF to Word, decode `input_bytes` (e.g., `text = input_bytes.decode('utf-8', errors='ignore')`), create a new `docx.Document()`, add text as paragraphs, and save it to `output_buffer`. Adding hyperlinks in docx requires XML manipulation (there is no `run.hyperlink`). To add a hyperlink, you MUST import `from docx.oxml.shared import OxmlElement, qn` and build the hyperlink element manually, OR simply output the URL as plain text.
-- For PDF creation/conversion: use reportlab (e.g., from reportlab.pdfgen import canvas; c = canvas.Canvas(output_buffer); c.drawString(100, 750, "Content"); c.save()). DO NOT import 'Link' from reportlab.platypus and DO NOT import 'getNormalStyle' from reportlab.lib.styles.
+- For PDF creation/conversion: use reportlab. You MUST explicitly import needed classes like `from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer` or `from reportlab.pdfgen import canvas`. DO NOT import 'Link' from reportlab.platypus. DO NOT try to fix execution errors by assigning to `result["bytes"]`. Just write to or assign to `output_buffer`.
 - For Images: use PIL (Pillow). Save directly to the buffer: `image.save(output_buffer, format='PNG')`. If loading an image from the web, wrap it in BytesIO: `Image.open(io.BytesIO(r.content))`.
 - For CSV/TXT/JSON/MD/PY: use string manipulation and write encoded text to output_buffer
 - Set output_filename to a descriptive name like "modified_report.xlsx"
@@ -177,7 +177,13 @@ def _safe_exec(code: str, input_bytes: bytes) -> tuple[bytes | None, str | None,
     def run():
         try:
             exec(code, global_vars, local_vars)
-            result["bytes"] = local_vars["output_buffer"].getvalue()
+            out_buf = local_vars.get("output_buffer")
+            if isinstance(out_buf, bytes):
+                result["bytes"] = out_buf
+            elif hasattr(out_buf, "getvalue"):
+                result["bytes"] = out_buf.getvalue()
+            else:
+                result["bytes"] = str(out_buf).encode("utf-8")
             result["filename"] = local_vars.get("output_filename", "modified_file")
         except Exception as e:
             result["error"] = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
