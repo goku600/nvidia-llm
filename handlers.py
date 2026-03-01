@@ -58,21 +58,43 @@ async def _edit_or_send(thinking_msg: Message, update: Update, text: str):
         # Fallback if the AI returns literally nothing
         text = "(No spoken response)"
         
+    async def _safe_edit(msg: Message, new_text: str, parse_mode=None):
+        try:
+            if parse_mode:
+                await msg.edit_text(new_text, parse_mode=parse_mode)
+            else:
+                await msg.edit_text(new_text)
+        except Exception as e:
+            err_str = str(e)
+            if "Message is not modified" in err_str: return True
+            if "Flood control" in err_str or "Retry in" in err_str:
+                import re
+                wait_time = 2
+                match = re.search(r'Retry in (\d+)', err_str)
+                if match:
+                    wait_time = int(match.group(1)) + 1
+                await asyncio.sleep(wait_time)
+                try:
+                    await msg.edit_text(new_text)
+                    return True
+                except Exception:
+                    pass
+            return False
+        return True
+
     try:
         if len(text) <= MAX_MSG:
-            try:
-                await thinking_msg.edit_text(text, parse_mode=ParseMode.MARKDOWN)
-            except Exception as e:
-                if "Message is not modified" in str(e): return
-                await thinking_msg.edit_text(text) # Fallback to plaintext
+            success = await _safe_edit(thinking_msg, text, ParseMode.MARKDOWN)
+            if not success:
+                await _safe_edit(thinking_msg, text)
         else:
             # Send first MAX_MSG chars, then one follow-up with the remainder
             first = text[:MAX_MSG]
             rest = text[MAX_MSG:]
-            try:
-                await thinking_msg.edit_text(first, parse_mode=ParseMode.MARKDOWN)
-            except Exception:
-                await thinking_msg.edit_text(first)
+            
+            success = await _safe_edit(thinking_msg, first, ParseMode.MARKDOWN)
+            if not success:
+                await _safe_edit(thinking_msg, first)
             
             # If rest is also too long, truncate gracefully
             if len(rest) > MAX_MSG:
