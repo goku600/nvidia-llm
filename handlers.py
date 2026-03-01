@@ -471,9 +471,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if did_search:
                     # Strip any premature hallucinated python blocks or trailing text
                     # so the history only remembers the clean thought before the search.
-                    final_reply = full_reply[:search_start].strip()
+                    final_reply = clean_reply_for_parsing[:search_start].strip()
                 else:
-                    final_reply = full_reply
+                    final_reply = clean_reply_for_parsing.strip()
             
             if did_search:
                 # Re-fetch history and loop again!
