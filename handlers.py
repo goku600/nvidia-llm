@@ -497,7 +497,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Log assistant response to history
     if "is_truncated" in locals() and is_truncated:
         sess.add_message(user_id, "assistant", locals().get("history_reply", final_reply))
-        sess.add_message(user_id, "system", "SYSTEM EXCEPTION: Your previous [PYTHON_EXEC] block was cut off by the token limit. You must rewrite the entire script from the beginning to be much shorter. Use loops instead of hardcoding lots of data. Do not continue the old block.")
+        sess.add_message(user_id, "user", "[SYSTEM EXCEPTION]: The previous [PYTHON_EXEC] block was cut off by the token limit. Rewrite the entire script from the beginning to be much shorter. Use loops instead of hardcoding lots of data. Do not continue the old block.")
     else:
         sess.add_message(user_id, "assistant", final_reply)
     await _edit_or_send(thinking_msg, update, final_reply)
