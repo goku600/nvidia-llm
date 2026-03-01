@@ -407,6 +407,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await thinking_msg.edit_text("⚙️ Generating your file, please wait...")
                 code = full_reply[exec_start + len("[PYTHON_EXEC]"):exec_end].strip()
                 
+                # Strip hallucinated markdown fences
+                import re
+                if code.startswith("```"):
+                    code = re.sub(r"^```(python)?\s*", "", code, flags=re.IGNORECASE)
+                if code.endswith("```"):
+                    code = re.sub(r"\s*```$", "", code)
+                
                 # Fetch explicitly uploaded file bytes if any exist in session
                 file_bytes, _, _ = sess.get_doc_file(user_id)
                 input_bytes = file_bytes if file_bytes else b""
