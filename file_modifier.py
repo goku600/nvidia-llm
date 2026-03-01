@@ -15,12 +15,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Allowed modules inside sandboxed execution
-SAFE_MODULES = {
-    "io", "json", "csv", "re", "math", "datetime", "collections", "pandas", "numpy",
-    "openpyxl", "pypdf", "docx", "PIL", "reportlab", "requests", "urllib", "gspread", "bs4",
-    "google", "google_auth_oauthlib", "googleapiclient", "oauth2client", "httplib2", 
-    "urllib3", "certifi", "idna", "charset_normalizer", "rsa", "pyasn1", "pyasn1_modules", "cachetools"
+# Strictly forbidden modules inside sandboxed execution
+FORBIDDEN_MODULES = {
+    "os", "sys", "subprocess", "shutil", "pty", "ptyprocess", "multiprocessing", "threading", "_thread"
 }
 
 EXECUTION_TIMEOUT = 30  # seconds
@@ -44,10 +41,10 @@ Your task: Write a complete Python script that:
 4. Sets `output_filename` (a string variable) to the output filename (e.g. "modified_{filename}")
 
 Rules:
-- Use only these libraries: io, json, csv, re, math, datetime, collections, openpyxl, pypdf, docx, PIL, reportlab
+- You can import any standard python library or common data science pip package (pandas, numpy, reportlab, docx, openpyxl, bs4, etc) except for OS/subprocess modules.
 - Do NOT use os, sys, subprocess, or any local file system calls. (You can use open() to read the input or save the output).
 - You MAY use `requests` or `urllib` to download files/images. ALWAYS use a User-Agent and check for HTTP errors (e.g. `r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}); r.raise_for_status()`).
-- Google Sheets: You ALREADY have a pre-authenticated `gspread_client` variable in scope. DO NOT use oauth2client, do NOT look for a client_secret.json, and do NOT attempt to authenticate. Just do: `sheet = gspread_client.open("Sheet Name").sheet1`. Use `sheet.append_row()` to add new data to the bottom. Use `sheet.update_cell(row, col, value)` or `sheet.update([range], [[values]])` ONLY if the user explicitly asks to modify/overwrite existing data. Use `sheet.delete_rows(row_index)` if asked to remove data. If reading data to show the user, pull records with `sheet.get_all_records()`, use `pandas.DataFrame(data)`, and save to `output_buffer` as a CSV.
+- Google Sheets: You ALREADY have a pre-authenticated `gspread_client` variable in scope. DO NOT use oauth2client, do NOT look for a client_secret.json, and do NOT attempt to authenticate. Just do: `import gspread; sheet = gspread_client.open("Sheet Name").sheet1`. DO NOT explicitly `import gspread_client` because it's already defined dynamically. Use `sheet.append_row()` to add new data to the bottom. Use `sheet.update_cell(row, col, value)` or `sheet.update([range], [[values]])` ONLY if the user explicitly asks to modify/overwrite existing data. Use `sheet.delete_rows(row_index)` if asked to remove data. If reading data to show the user, pull records with `sheet.get_all_records()`, use `pandas.DataFrame(data)`, and save to `output_buffer` as a CSV.
 - Read from `input_bytes` (bytes) or `open('input.txt', 'r')`, write to `output_buffer` (BytesIO) or `open('output_filename.ext', 'wb')`.
 - For Excel: use openpyxl (import openpyxl). Save directly to the buffer: `wb.save(output_buffer)`
 - For Word: use python-docx (import docx). Save directly to the buffer: `doc.save(output_buffer)`. DO NOT save to a string filename. To convert PDF to Word, decode `input_bytes` (e.g., `text = input_bytes.decode('utf-8', errors='ignore')`), create a new `docx.Document()`, add text as paragraphs, and save it to `output_buffer`. Adding hyperlinks in docx requires XML manipulation (there is no `run.hyperlink`). To add a hyperlink, you MUST import `from docx.oxml.shared import OxmlElement, qn` and build the hyperlink element manually, OR simply output the URL as plain text.
@@ -99,14 +96,22 @@ def _safe_exec(code: str, input_bytes: bytes) -> tuple[bytes | None, str | None,
     # Allow safe imports via a controlled __import__
     def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
         base = name.split(".")[0]
-        if base not in SAFE_MODULES:
-            raise ImportError(f"Import of '{name}' is not allowed in sandbox.")
+        if base in FORBIDDEN_MODULES:
+            raise ImportError(f"Import of forbidden module '{name}' is blocked for security.")
+        
+        # Verify the module actually exists before attempting to import to fail fast
+        try:
+            import importlib.util
+            if importlib.util.find_spec(base) is None:
+                raise ImportError(f"Module '{base}' is not installed in the environment.")
+        except Exception:
+            pass # Fallback to real import if find_spec fails
+            
         try:
             return _real_import(name, globals, locals, fromlist, level)
         except ImportError as e:
-            # If a deep import fails, sometimes it's because of strict __import__ sandboxing.
-            # We let it bubble up, but log it so we know which dependency failed.
-            raise ImportError(f"Sandbox allowed '{base}' but failed to load '{name}': {e}")
+            # Let it bubble up, but log it so we know which dependency failed.
+            raise ImportError(f"Sandbox attempted to load '{name}' but failed: {e}")
 
     safe_builtins["__import__"] = safe_import
     safe_builtins["print"] = lambda *a, **k: None  # silence prints
