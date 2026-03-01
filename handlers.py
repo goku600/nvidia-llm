@@ -488,16 +488,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 
                 # Clean the reply to remove the python block
-                clean_reply = clean_reply_for_parsing[:exec_start].strip() + "\n" + clean_reply_for_parsing[exec_end + len("[/PYTHON_EXEC]"):].strip()
+                user_friendly_text = clean_reply_for_parsing[:exec_start].strip()
+                clean_reply = user_friendly_text + "\n" + clean_reply_for_parsing[exec_end + len("[/PYTHON_EXEC]"):].strip()
                 final_reply = clean_reply.strip() or "✅ Task completed."
-                history_reply = clean_reply_for_parsing.strip()
                 
                 if error:
                     final_reply += f"\n\n⚠️ **Execution Error:**\n```\n{error[:500]}\n```"
-                    history_reply += f"\n\n⚠️ **Execution Error:**\n```\n{error[:500]}\n```"
+                    # KEEP the python code in history so the AI can read it and fix its exact syntax error!
+                    history_reply = clean_reply_for_parsing.strip() + f"\n\n⚠️ **Execution Error:**\n```\n{error[:500]}\n```"
                 elif output_bytes:
                     output_file = (output_bytes, output_filename)
-                    history_reply += f"\n\n[SYSTEM NOTIFICATION: Code executed successfully and generated file {output_filename}. Note: The python block was hidden from the user UI, but the file was delivered. The file is now available in `input_bytes`.]"
+                    # DELETE the python code from history! Just tell the AI it was successful so it doesn't get stuck in a loop repeating it!
+                    history_reply = user_friendly_text + f"\n\n[System: At this point, you successfully executed a Python script that generated '{output_filename}'. The file was delivered to the user and is actively loaded in memory as `input_bytes`. Do NOT generate the script again unless asked.]"
                     
                     ext = output_filename.rsplit('.', 1)[-1].lower() if '.' in output_filename else 'bin'
                     mime_map = {'pdf': 'application/pdf', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'png': 'image/png', 'csv': 'text/csv', 'jpg': 'image/jpeg'}
@@ -517,11 +519,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # The code block was never closed, likely because the LLM hit the token limit
                 is_truncated = True
                 
-                # history_reply needs the python code so the AI knows where it left off,
-                # BUT the final_reply intended for the user should hide it!
-                history_reply = clean_reply_for_parsing.strip()
                 user_friendly_text = clean_reply_for_parsing[:exec_start].strip()
                 final_reply = user_friendly_text + "\n\n⚠️ **Warning:** The generated Python code was too long and got cut off by the AI token limit. Do NOT type 'continue'. Tell the bot to use dynamic loops or make the script shorter."
+                # Strip the broken python code from history to save tokens and prevent confusion
+                history_reply = user_friendly_text + "\n\n[System: Your Python script hit the max token limit and was truncated. You must rewrite it from scratch. Use dynamic loops to stay short.]"
             else:
                 # Normal terminal reply (clean search block if any)
                 if did_search:
