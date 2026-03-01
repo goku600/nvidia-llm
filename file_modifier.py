@@ -204,10 +204,10 @@ def _safe_exec(code: str, input_bytes: bytes) -> tuple[bytes | None, str | None,
     thread.join(timeout=EXECUTION_TIMEOUT)
 
     if thread.is_alive():
-        return None, None, f"Code execution timed out after {EXECUTION_TIMEOUT}s."
+        return None, None, f"Code execution timed out after {EXECUTION_TIMEOUT}s.", None
 
     if result["error"]:
-        return None, None, result["error"]
+        return None, None, result["error"], None
 
     output_bytes = result["bytes"]
     if not output_bytes:
