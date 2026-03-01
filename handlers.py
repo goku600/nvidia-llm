@@ -399,8 +399,21 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Update Telegram message every 1.5 seconds to avoid rate limits
                 current_time = time.time()
                 if current_time - last_edit_time > 1.5:
+                    
+                    # Hide python execution streaming if present
+                    display_text = full_reply
+                    exec_marker_1 = "```python\n[PYTHON_EXEC]"
+                    exec_marker_2 = "[PYTHON_EXEC]"
+                    
+                    if exec_marker_1 in display_text:
+                        idx = display_text.find(exec_marker_1)
+                        display_text = display_text[:idx].strip() + "\n\n⚙️ Generating file..."
+                    elif exec_marker_2 in display_text:
+                        idx = display_text.find(exec_marker_2)
+                        display_text = display_text[:idx].strip() + "\n\n⚙️ Generating file..."
+                    
                     # Truncate for streaming preview if it gets too long
-                    preview_text = full_reply if len(full_reply) < MAX_MSG else full_reply[:MAX_MSG] + "..."
+                    preview_text = display_text if len(display_text) < MAX_MSG else display_text[:MAX_MSG] + "..."
                     try:
                         await thinking_msg.edit_text(preview_text + " ⏳")
                         last_edit_time = current_time
