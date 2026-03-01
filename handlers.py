@@ -497,7 +497,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     history_reply += f"\n\n⚠️ **Execution Error:**\n```\n{error[:500]}\n```"
                 elif output_bytes:
                     output_file = (output_bytes, output_filename)
-                    history_reply += f"\n\n[SYSTEM NOTIFICATION: Code executed successfully and generated file {output_filename}. Note: The python block was hidden from the user UI, but the file was delivered.]"
+                    history_reply += f"\n\n[SYSTEM NOTIFICATION: Code executed successfully and generated file {output_filename}. Note: The python block was hidden from the user UI, but the file was delivered. The file is now available in `input_bytes`.]"
+                    
+                    ext = output_filename.rsplit('.', 1)[-1].lower() if '.' in output_filename else 'bin'
+                    mime_map = {'pdf': 'application/pdf', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'png': 'image/png', 'csv': 'text/csv', 'jpg': 'image/jpeg'}
+                    mime = mime_map.get(ext, 'application/octet-stream')
+                    
+                    sess.set_doc_text(
+                        user_id,
+                        f"[System: The user's active file is now the generated {output_filename}. You can process it using Python via the `input_bytes` variable.]",
+                        filename=output_filename,
+                        file_bytes=output_bytes,
+                        mime=mime
+                    )
                 else:
                     # Successful "silent" execution (e.g. wrote to a database without returning a file)
                     history_reply += f"\n\n[SYSTEM NOTIFICATION: Code executed successfully without returning a file.]"
