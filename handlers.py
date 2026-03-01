@@ -463,7 +463,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     pass
             elif exec_start != -1 and exec_end == -1 and not did_search:
                 # The code block was never closed, likely because the LLM hit the token limit
-                final_reply = clean_reply_for_parsing.strip() + "\n\n⚠️ **Warning:** The generated Python code was too long and got cut off by the AI token limit. Try asking the AI to keep the code shorter and not hardcode large amounts of text."
+                is_truncated = True
+                history_reply = clean_reply_for_parsing.strip()
+                final_reply = history_reply + "\n\n⚠️ **Warning:** The generated Python code was too long and got cut off by the AI token limit. Do NOT type 'continue'. Tell the bot to use dynamic loops or make the script shorter."
             else:
                 # Normal terminal reply (clean search block if any)
                 if did_search:
@@ -493,7 +495,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         typing_task.cancel()
 
     # Log assistant response to history
-    sess.add_message(user_id, "assistant", final_reply)
+    if "is_truncated" in locals() and is_truncated:
+        sess.add_message(user_id, "assistant", locals().get("history_reply", final_reply))
+        sess.add_message(user_id, "system", "SYSTEM EXCEPTION: Your previous [PYTHON_EXEC] block was cut off by the token limit. You must rewrite the entire script from the beginning to be much shorter. Use loops instead of hardcoding lots of data. Do not continue the old block.")
+    else:
+        sess.add_message(user_id, "assistant", final_reply)
     await _edit_or_send(thinking_msg, update, final_reply)
     
     # If a file was generated, send it as a follow-up
