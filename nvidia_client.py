@@ -34,8 +34,8 @@ async def _post(payload: dict):
                     continue
                 line = line.decode("utf-8")
                 if line.startswith("data: "):
-                    data_str = line[6:]
-                    if data_str.strip() == "[DONE]":
+                    data_str = line[6:].strip()  # strip \r\n to avoid JSON parse failures
+                    if data_str == "[DONE]":
                         break
                     try:
                         data = json.loads(data_str)
@@ -56,7 +56,6 @@ def _base_payload(model: str, messages: list, thinking: bool = False) -> dict:
         "max_tokens": MAX_TOKENS,
         "temperature": TEMPERATURE,
         "top_p": TOP_P,
-        "top_k": TOP_K,
         "top_k": TOP_K,
         "presence_penalty": 0.2,
         "repetition_penalty": 1.1,
@@ -97,7 +96,7 @@ async def chat(history: list[dict], model: str = CHAT_MODEL) -> AsyncGenerator[s
         "2. End the block with exactly `[/PYTHON_EXEC]` on its own line.\n"
         "3. Allowed libraries: You can import any standard python library or common data science pip package (pandas, numpy, reportlab, docx, openpyxl, bs4, etc). Strict OS/subprocess libraries are blocked.\n"
         "4. **No other imports** or local disk access is allowed. You MAY use 'requests' or 'urllib' to download internet data or images if requested. ALWAYS use a User-Agent and check `raise_for_status()` to avoid downloading error pages. Write successful downloaded content directly to `output_buffer`. DO NOT hallucinate URLs. You MUST use the `[WEB_SEARCH]` tool first to find a real, valid URL to the requested image or data before writing code. You MUST explicitly import PDF classes like `Paragraph` from `reportlab.platypus`. DO NOT import 'Link' from reportlab.platypus. DO NOT try to fix execution errors by assigning to `result[\"bytes\"]`. Just write to or assign to `output_buffer`.\n"
-        "5. **GOOGLE SHEETS (DATABASE) ACCESS**: For Google Sheets (often called 'database' or 'docs database'), you have a globally defined authenticated client named exactly `gspread_client`. Just do `import gspread; sheet = gspread_client.open('Sheet Name').sheet1`. **CRITICAL:** DO NOT write your own authentication code! DO NOT use `oauth2client` and NEVER try to load `client_secret.json`. DO NOT explicitly `import gspread_client` because it's already dynamically defined. Use `sheet.append_row()` to add data. Use `sheet.update()`, `sheet.delete_rows()` ONLY if asked to overwrite or remove. If asked to 'read' or 'show' database data, you MUST pull all records (`data = sheet.get_all_records()`), convert to a pandas DataFrame (`df = pandas.DataFrame(data)`), and save it to the `output_buffer` as a CSV (`df.to_csv(output_buffer, index=False)`) or string TXT file so the user can download it. To add hyperlinks locally, use the formula format: `=HYPERLINK(\"url\", \"text\")`.\n"
+        "5. **GOOGLE SHEETS (DATABASE) ACCESS**: For Google Sheets (often called 'database' or 'docs database'), you have a globally defined authenticated client INSTANCE named exactly `gspread_client` (it is a `gspread.Client` INSTANCE, NOT the module). CRITICAL: use ONLY `sheet = gspread_client.open('Sheet Name').sheet1` — NEVER `gspread.open()`, NEVER `gspread.client.open()`. DO NOT write your own authentication code! DO NOT use `oauth2client` and NEVER try to load `client_secret.json`. DO NOT explicitly `import gspread_client` because it's already dynamically defined. Use `sheet.append_row()` to add data. Use `sheet.update()`, `sheet.delete_rows()` ONLY if asked to overwrite or remove. If asked to 'read' or 'show' database data, you MUST pull all records (`data = sheet.get_all_records()`), convert to a pandas DataFrame (`df = pandas.DataFrame(data)`), and save it to the `output_buffer` as a CSV (`df.to_csv(output_buffer, index=False)`) or string TXT file so the user can download it. To add hyperlinks locally, use the formula format: `=HYPERLINK(\"url\", \"text\")`.\n"
         "6. If a user previously uploaded a document, its raw bytes are available in the variable `input_bytes` (type: bytes). To read a PDF from `input_bytes`, you MUST wrap it in `io.BytesIO(input_bytes)` before passing to `PdfReader`.\n"
         "7. Write your output to the pre-existing variable `output_buffer` (type: io.BytesIO). DO NOT use `open()` to save files, as it is strictly blocked. If the user asks a question about a file (e.g. 'how many words', 'extract the text'), DO NOT save a new file! Just use `print()` to output the answer. The system will read your printed output and let you respond directly in chat. If reading PDFs, use `pypdf` (e.g., `from pypdf import PdfReader`; `reader = PdfReader(io.BytesIO(input_bytes))`). DO NOT use PyPDF2. If loading an internet image into PIL, you MUST verify it succeeds and wrap the bytes: `Image.open(io.BytesIO(r.content))`.\n"
         "8. Set the pre-existing variable `output_filename` (type: str) to the desired filename.\n"

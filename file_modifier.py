@@ -44,7 +44,7 @@ Rules:
 - You can import any standard python library or common data science pip package (pandas, numpy, reportlab, docx, openpyxl, bs4, etc) except for OS/subprocess modules.
 - Do NOT use os, sys, subprocess, or any local file system calls. (You can use open() to read the input or save the output).
 - You MAY use `requests` or `urllib` to download files/images. ALWAYS use a User-Agent and check for HTTP errors (e.g. `r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}); r.raise_for_status()`).
-- Google Sheets: You ALREADY have a pre-authenticated `gspread_client` variable in scope. DO NOT use oauth2client, do NOT look for a client_secret.json, and do NOT attempt to authenticate. Just do: `import gspread; sheet = gspread_client.open("Sheet Name").sheet1`. DO NOT explicitly `import gspread_client` because it's already defined dynamically. Use `sheet.append_row()` to add new data to the bottom. Use `sheet.update_cell(row, col, value)` or `sheet.update([range], [[values]])` ONLY if the user explicitly asks to modify/overwrite existing data. Use `sheet.delete_rows(row_index)` if asked to remove data. If reading data to show the user, pull records with `sheet.get_all_records()`, use `pandas.DataFrame(data)`, and save to `output_buffer` as a CSV.
+- Google Sheets: You ALREADY have a pre-authenticated `gspread_client` variable in scope (it is the authenticated `gspread.Client` INSTANCE, NOT the module). DO NOT use oauth2client, do NOT look for a client_secret.json, and do NOT attempt to authenticate. CRITICAL: use ONLY `gspread_client.open("Sheet Name")` — NEVER `gspread.open()`, NEVER `gspread.client.open()`, NEVER `client.open()`. Just do: `sheet = gspread_client.open("Sheet Name").sheet1`. DO NOT explicitly `import gspread_client` because it's already defined dynamically. Use `sheet.append_row()` to add new data to the bottom. Use `sheet.update_cell(row, col, value)` or `sheet.update([range], [[values]])` ONLY if the user explicitly asks to modify/overwrite existing data. Use `sheet.delete_rows(row_index)` if asked to remove data. If reading data to show the user, pull records with `sheet.get_all_records()`, use `pandas.DataFrame(data)`, and save to `output_buffer` as a CSV.
 - Read from `input_bytes` (bytes) or `open('input.txt', 'r')`, write to `output_buffer` (BytesIO) or `open('output_filename.ext', 'wb')`. To read a PDF from `input_bytes`, you MUST wrap it in `io.BytesIO(input_bytes)` before passing to `PdfReader`.
 - For Excel: use openpyxl (import openpyxl). Save directly to the buffer: `wb.save(output_buffer)`
 - For Word: use python-docx (import docx). Save directly to the buffer: `doc.save(output_buffer)`. DO NOT save to a string filename. To convert PDF to Word, extract text using pypdf (e.g., `reader = pypdf.PdfReader(io.BytesIO(input_bytes)); text = reader.pages[0].extract_text()`), create a new `docx.Document()`, add text as paragraphs, and save it to `output_buffer`. Adding hyperlinks in docx requires XML manipulation (there is no `run.hyperlink`). To add a hyperlink, you MUST import `from docx.oxml.shared import OxmlElement, qn` and build the hyperlink element manually, OR simply output the URL as plain text.
@@ -184,6 +184,11 @@ def _safe_exec(code: str, input_bytes: bytes) -> tuple[bytes | None, str | None,
     safe_builtins["open"] = safe_open
 
     global_vars = {"__builtins__": safe_builtins}
+
+    # If the model emitted literal \n escape sequences instead of real newlines,
+    # unescape them so the code doesn't arrive as one long invalid line.
+    if "\\n" in code and "\n" not in code:
+        code = code.replace("\\n", "\n")
 
     def run():
         try:

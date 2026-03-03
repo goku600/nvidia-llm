@@ -328,6 +328,8 @@ async def cmd_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------------------------------------------------------------------
 # Callback
 # ---------------------------------------------------------------------------
+
+async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
@@ -382,10 +384,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history_reply = None
         is_truncated = False
         last_edit_time = 0
-        has_shown_generating = False
         
         while True:
             full_reply = ""
+            has_shown_generating = False  # reset per iteration so file-gen UI works after a search
             
             # Route to vision model if image exists in context AND user's text seems related
             # Otherwise use standard text model

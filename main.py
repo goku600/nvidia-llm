@@ -24,6 +24,7 @@ from handlers import (
     handle_text,
     handle_photo,
     handle_document,
+    handle_callback_query,
 )
 
 logging.basicConfig(
@@ -47,6 +48,7 @@ async def main():
     app.add_handler(CommandHandler("clear", cmd_clear))
     app.add_handler(CommandHandler("privacy", cmd_privacy))
     app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CallbackQueryHandler(handle_callback_query))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))

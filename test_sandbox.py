@@ -5,8 +5,8 @@ with open('output.txt', 'w') as f:
     f.write('hello world')
 """
 
-b, name, err = file_modifier._safe_exec(code1, b"")
-print("Test 1 Output:", b, name, err)
+b, name, err, printed = file_modifier._safe_exec(code1, b"")
+print("Test 1 Output:", b, name, err, printed)
 
 code2 = """
 with open('input.txt', 'r') as f:
@@ -15,19 +15,19 @@ with open('input.txt', 'r') as f:
 with open('output2.txt', 'w') as f:
     f.write(data + " appended")
 """
-b2, name2, err2 = file_modifier._safe_exec(code2, b"initial")
-print("Test 2 Output:", b2, name2, err2)
+b2, name2, err2, printed2 = file_modifier._safe_exec(code2, b"initial")
+print("Test 2 Output:", b2, name2, err2, printed2)
 
 code3 = """
 with open('/etc/passwd', 'r') as f:
     data = f.read()
 """
-b3, name3, err3 = file_modifier._safe_exec(code3, b"hello")
-print("Test 3 Output (read any file gives input_bytes):", b3, name3[:20] if name3 else None, err3)
+b3, name3, err3, printed3 = file_modifier._safe_exec(code3, b"hello")
+print("Test 3 Output (read any file gives input_bytes):", b3, name3[:20] if name3 else None, err3, printed3)
 
 code4 = """
 output_buffer.write('direct write'.encode())
 output_filename = 'direct.txt'
 """
-b4, name4, err4 = file_modifier._safe_exec(code4, b"")
-print("Test 4 Output:", b4, name4, err4)
+b4, name4, err4, printed4 = file_modifier._safe_exec(code4, b"")
+print("Test 4 Output:", b4, name4, err4, printed4)
